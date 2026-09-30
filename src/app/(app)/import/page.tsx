@@ -9,6 +9,7 @@ import {
   Loader2,
   Sparkles,
   Trash2,
+  Undo2,
   Upload,
   X,
 } from "lucide-react";
@@ -19,21 +20,18 @@ import { formatTime } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-
-type Draft = {
-  subject_name: string;
-  subject_en: string;
-  code: string;
-  doctor: string;
-  hall: string;
-  day: number;
-  start_time: string;
-  end_time: string;
-  kind: "lecture" | "section";
-  notes: string;
-  department: string;
-  color: string;
-};
+import {
+  draftKey,
+  emptyPreview,
+  keptRows,
+  removeAt,
+  removedRows,
+  renameAt,
+  restoreAll,
+  restoreAt,
+  type Draft,
+  type Preview,
+} from "@/lib/import-drafts";
 
 const toDraft = (r: Record<string, unknown>, i: number): Draft => ({
   subject_name: String(r.subject_name ?? ""),
@@ -50,10 +48,6 @@ const toDraft = (r: Record<string, unknown>, i: number): Draft => ({
   color: LECTURE_COLORS[i % LECTURE_COLORS.length],
 });
 
-/** One lecture is the same when its subject, day and start all match. */
-const draftKey = (d: Draft) =>
-  `${d.subject_name.trim().toLowerCase()}|${d.day}|${d.start_time}`;
-
 const readAsDataUrl = (file: File) =>
   new Promise<string>((resolve, reject) => {
     const r = new FileReader();
@@ -68,16 +62,38 @@ export default function ImportPage() {
   const { data: existing = [] } = useList("Lecture", "-created_date", 300);
   const { bulkCreate, deleteMany } = useMutate("Lecture");
   const [files, setFiles] = useState<{ name: string; uri: string }[]>([]);
-  const [drafts, setDrafts] = useState<Draft[]>([]);
+  const [preview, setPreview] = useState<Preview>(emptyPreview());
   const [busy, setBusy] = useState(false);
   const [replace, setReplace] = useState(false);
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const kept = useMemo(() => keptRows(preview), [preview]);
+  const gone = useMemo(() => removedRows(preview), [preview]);
+
   const duplicates = useMemo(() => {
     const have = new Set(existing.map((l) => draftKey(l as unknown as Draft)));
-    return drafts.map((d) => have.has(draftKey(d)));
-  }, [drafts, existing]);
+    return new Set(preview.all.map((d, i) => (have.has(draftKey(d)) ? i : -1)).filter((i) => i >= 0));
+  }, [preview, existing]);
+
+  /**
+   * Takes a row out of the list but keeps it, and says so. The user is
+   * reviewing a read of a photograph, so a row taken out is a guess about
+   * what the assistant misread - it needs to be reversible before saving,
+   * not a deletion.
+   */
+  const drop = (i: number) => {
+    setPreview((p) => removeAt(p, i));
+    const name = preview.all[i]?.subject_name;
+    toast({
+      title: tr("اتشالت المحاضرة", "Lecture removed"),
+      description: name,
+      action: {
+        label: tr("رجّعها", "Undo"),
+        onClick: () => setPreview((p) => restoreAt(p, i)),
+      },
+    });
+  };
 
   const addFiles = async (list: FileList | null) => {
     if (!list) return;
@@ -102,7 +118,7 @@ export default function ImportPage() {
     if (!files.length) return;
     setBusy(true);
     setError("");
-    setDrafts([]);
+    setPreview(emptyPreview());
     try {
       const res = await fetch("/api/ai/import", {
         method: "POST",
@@ -127,7 +143,7 @@ export default function ImportPage() {
         );
         return;
       }
-      setDrafts(rows);
+      setPreview({ all: rows, removed: [] });
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -136,20 +152,23 @@ export default function ImportPage() {
   };
 
   const commit = async () => {
-    if (!drafts.length) return;
+    if (!kept.length) return;
     setBusy(true);
     try {
       // A second photo of the same timetable must not double the schedule, so
       // anything already in the table is skipped unless the user asked for a
       // full replace. `existing` is the user's own rows only, thanks to RLS.
+      // Saved from the kept rows, so a row the user removed stays out even
+      // though it is still held for undo.
+      const rows = kept.map(({ row }) => row);
       const have = new Set(existing.map((l) => draftKey(l as unknown as Draft)));
-      const skipped = replace ? 0 : drafts.filter((d) => have.has(draftKey(d))).length;
-      const rows = replace ? drafts : drafts.filter((d) => !have.has(draftKey(d)));
+      const skipped = replace ? 0 : rows.filter((d) => have.has(draftKey(d))).length;
+      const fresh = replace ? rows : rows.filter((d) => !have.has(draftKey(d)));
 
       if (replace) await deleteMany({}, { all: true });
-      if (rows.length) {
+      if (fresh.length) {
         await bulkCreate(
-          rows.map((d) => ({
+          fresh.map((d) => ({
             ...d,
             subject_name: d.subject_name.trim(),
             notes: d.notes.trim(),
@@ -157,7 +176,7 @@ export default function ImportPage() {
         );
       }
       toast({
-        title: tr(`تم إضافة ${rows.length} محاضرة`, `Added ${rows.length} lectures`),
+        title: tr(`تم إضافة ${fresh.length} محاضرة`, `Added ${fresh.length} lectures`),
         description: skipped
           ? tr(
               `${skipped} محاضرة موجودة بالفعل واتسابت`,
@@ -165,7 +184,7 @@ export default function ImportPage() {
             )
           : undefined,
       });
-      setDrafts([]);
+      setPreview(emptyPreview());
       setFiles([]);
     } catch (e) {
       setError((e as Error).message);
@@ -273,14 +292,14 @@ export default function ImportPage() {
         </p>
       )}
 
-      {drafts.length > 0 && (
+      {kept.length > 0 && (
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="font-display text-lg font-bold">
               {tr("راجع قبل الحفظ", "Review before saving")}
             </h2>
             <span className="text-sm text-muted-foreground">
-              {drafts.length} {tr("محاضرة", "lectures")}
+              {kept.length} {tr("محاضرة", "lectures")}
             </span>
             {existing.length > 0 && (
               <label className="ms-auto flex items-center gap-2 text-sm">
@@ -298,7 +317,7 @@ export default function ImportPage() {
           </div>
 
           <ul className="space-y-2">
-            {drafts.map((d, i) => (
+            {kept.map(({ row: d, i }) => (
               <li
                 key={i}
                 className="flex items-center gap-3 rounded-xl border bg-card p-3"
@@ -306,12 +325,12 @@ export default function ImportPage() {
                 <span
                   className={cn(
                     "flex h-11 w-11 shrink-0 items-center justify-center rounded-lg",
-                    duplicates[i]
+                    duplicates.has(i)
                       ? "bg-amber-100 text-amber-700"
                       : "bg-emerald-100 text-emerald-700",
                   )}
                   title={
-                    duplicates[i]
+                    duplicates.has(i)
                       ? tr(
                           "موجودة بالفعل — هتتخطى وقت الحفظ",
                           "Already in the schedule — will be skipped on save",
@@ -319,7 +338,7 @@ export default function ImportPage() {
                       : ""
                   }
                 >
-                  {duplicates[i] ? (
+                  {duplicates.has(i) ? (
                     <X className="h-4 w-4" />
                   ) : (
                     <Check className="h-4 w-4" />
@@ -328,13 +347,7 @@ export default function ImportPage() {
                 <div className="min-w-0 flex-1">
                   <input
                     value={d.subject_name}
-                    onChange={(e) =>
-                      setDrafts((p) => {
-                        const n = [...p];
-                        n[i] = { ...d, subject_name: e.target.value };
-                        return n;
-                      })
-                    }
+                    onChange={(e) => setPreview((p) => renameAt(p, i, e.target.value))}
                     className="w-full rounded-md border bg-transparent px-2 py-1 font-semibold"
                     dir="auto"
                   />
@@ -350,7 +363,7 @@ export default function ImportPage() {
                   size="icon"
                   variant="ghost"
                   className="h-8 w-8 shrink-0 text-destructive"
-                  onClick={() => setDrafts((p) => p.filter((_, j) => j !== i))}
+                  onClick={() => drop(i)}
                   aria-label={tr("شيل السطر", "Remove row")}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -359,8 +372,52 @@ export default function ImportPage() {
             ))}
           </ul>
 
+          {gone.length > 0 && (
+            <div className="rounded-xl border border-dashed bg-muted/40 p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-sm font-semibold">
+                  {tr(
+                    `${gone.length} محاضرة متشالة — لسه ترجع`,
+                    `${gone.length} removed — still restorable`,
+                  )}
+                </p>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="ms-auto"
+                  onClick={() => setPreview((p) => restoreAll(p))}
+                >
+                  <Undo2 className="h-3.5 w-3.5" />
+                  {tr("استرجع الكل", "Restore all")}
+                </Button>
+              </div>
+              <ul className="mt-2 space-y-1">
+                {gone.map(({ row: d, i }) => (
+                  <li key={i} className="flex items-center gap-2 text-sm">
+                    <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                      {d.subject_name} · {dayName(d.day, lang)} ·{" "}
+                      {formatTime(d.start_time)}
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setPreview((p) => restoreAt(p, i))}
+                    >
+                      <Undo2 className="h-3.5 w-3.5" />
+                      {tr("رجّعها", "Restore")}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button variant="outline" onClick={() => setDrafts([])} disabled={busy}>
+            <Button
+              variant="outline"
+              onClick={() => setPreview(emptyPreview())}
+              disabled={busy}
+            >
               {tr("ألغي", "Discard")}
             </Button>
             <Button onClick={() => void commit()} disabled={busy} className="h-12 text-base">
