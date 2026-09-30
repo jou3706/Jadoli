@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { DAYS, LECTURE_COLORS, colorStyle } from "@/lib/constants";
-import { findConflicts, lectureTitle } from "@/lib/schedule";
+import { applySubjectDetails, findConflicts, lectureTitle, subjectCatalogue } from "@/lib/schedule";
 import { useList, useMutate } from "@/lib/db/store";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -90,13 +90,19 @@ export function LectureFormDialog({
     }
   }, [open, lecture, lectures]);
 
-  const knownSubjects = useMemo(
-    () =>
-      Array.from(
-        new Set(lectures.map((l) => l.subject_name).filter(Boolean)),
-      ).sort((a, b) => a.localeCompare(b, "ar")),
-    [lectures],
-  );
+  const catalogue = useMemo(() => subjectCatalogue(lectures), [lectures]);
+
+  /** Picking a subject brings its own details, so only the time needs typing. */
+  function chooseSubject(name: string) {
+    if (name === "__custom__") {
+      setCustom(true);
+      setForm((f) => ({ ...f, subject_name: "" }));
+      return;
+    }
+    setCustom(false);
+    const source = catalogue.find((l) => l.subject_name === name);
+    setForm((f) => ({ ...applySubjectDetails(f, source), subject_name: name }));
+  }
 
   const conflicts = useMemo(
     () => findConflicts(lectures, form, form.id),
@@ -151,21 +157,13 @@ export function LectureFormDialog({
           <Field label={tr("اسم المادة", "Subject name")} className="col-span-2">
             <Select
               value={custom ? "__custom__" : form.subject_name}
-              onChange={(e) => {
-                const v = e.target.value;
-                if (v === "__custom__") {
-                  setCustom(true);
-                  setForm((f) => ({ ...f, subject_name: "" }));
-                } else {
-                  setCustom(false);
-                  setForm((f) => ({ ...f, subject_name: v }));
-                }
-              }}
+              onChange={(e) => chooseSubject(e.target.value)}
             >
               <option value="">{tr("— اختر مادة —", "— Select subject —")}</option>
-              {knownSubjects.map((s) => (
-                <option key={s} value={s}>
-                  {s}
+              {catalogue.map((l) => (
+                <option key={l.subject_name} value={l.subject_name}>
+                  {l.subject_name}
+                  {l.code ? ` (${l.code})` : ""}
                 </option>
               ))}
               <option value="__custom__">

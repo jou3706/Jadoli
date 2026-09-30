@@ -5,6 +5,7 @@ import { GraduationCap, Pencil, Plus, Trash2 } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { useList, useMutate } from "@/lib/db/store";
 import { GRADE_SCALE } from "@/lib/constants";
+import { subjectCatalogue } from "@/lib/schedule";
 import { useToast } from "@/components/ui/toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -36,16 +37,33 @@ function GradeForm({
 }) {
   const { tr } = useI18n();
   const { create, update } = useMutate("Grade");
+  const { data: lectures = [] } = useList("Lecture", "-created_date", 300);
+  const { data: grades = [] } = useList("Grade");
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [error, setError] = useState("");
   const [dirty, setDirty] = useState(false);
+  const [custom, setCustom] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setDirty(false);
     setError("");
     setDraft(EMPTY);
+    setCustom(false);
   }, [open, grade]);
+
+  /**
+   * The courses already in the schedule, so a course can be picked instead of
+   * retyped. Grading is the second half of the same course: the code comes with
+   * the name, and only the hours, the letter and the term are left to enter.
+   */
+  const catalogue = useMemo(() => subjectCatalogue(lectures), [lectures]);
+
+  /** Courses already carrying a grade, so the same one is not entered twice. */
+  const taken = useMemo(() => {
+    const s = new Set(grades.map((g) => g.subject_name.trim().toLowerCase()));
+    return s;
+  }, [grades]);
 
   const effective: Draft = dirty
     ? draft
@@ -110,18 +128,75 @@ function GradeForm({
           }}
         >
           <Field label={tr("المادة", "Course")} className="col-span-2">
-            <Input
-              value={effective.subject_name}
-              onChange={(e) => set("subject_name")(e.target.value)}
-              className="h-11 text-base"
-              autoFocus
-            />
+            {custom ? (
+              <Input
+                value={effective.subject_name}
+                onChange={(e) => set("subject_name")(e.target.value)}
+                className="h-11 text-base"
+                autoFocus
+                placeholder={tr("اكتب اسم المادة", "Type the course name")}
+              />
+            ) : (
+              <Select
+                value={effective.subject_name}
+                onChange={(e) => {
+                  const name = e.target.value;
+                  if (name === "__custom__") {
+                    setCustom(true);
+                    setDirty(true);
+                    setDraft((d) => ({ ...d, subject_name: "", code: "" }));
+                    return;
+                  }
+                  // The code belongs to the course, not to the grade, so it
+                  // comes along with the name instead of being retyped.
+                  const source = catalogue.find((l) => l.subject_name === name);
+                  setDirty(true);
+                  setDraft((d) => ({
+                    ...d,
+                    subject_name: name,
+                    code: source?.code || d.code,
+                  }));
+                }}
+              >
+                <option value="">{tr("— اختر مادة —", "— Select course —")}</option>
+                {catalogue.map((l) => (
+                  <option key={l.subject_name} value={l.subject_name}>
+                    {l.subject_name}
+                    {l.code ? ` (${l.code})` : ""}
+                    {taken.has(l.subject_name.trim().toLowerCase())
+                      ? ` — ${tr("مُضافة", "added")}`
+                      : ""}
+                  </option>
+                ))}
+                <option value="__custom__">
+                  {tr("أخرى — كتابة يدوية", "Other — type manually")}
+                </option>
+              </Select>
+            )}
           </Field>
+
+          {custom && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="col-span-2 -mt-2 justify-self-start text-muted-foreground"
+              onClick={() => {
+                setCustom(false);
+                setDirty(true);
+                setDraft((d) => ({ ...d, subject_name: "", code: "" }));
+              }}
+            >
+              {tr("اختار من مواد الجدول", "Pick from the schedule")}
+            </Button>
+          )}
 
           <Field label={tr("الكود", "Code")}>
             <Input
               value={effective.code}
               onChange={(e) => set("code")(e.target.value)}
+              readOnly={!custom}
+              placeholder={tr("يتملأ تلقائيًا", "filled in for you")}
               className="h-11 text-base"
             />
           </Field>

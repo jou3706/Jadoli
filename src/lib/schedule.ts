@@ -124,3 +124,58 @@ export function groupBySubject(lectures: Lecture[]) {
     }, {}),
   );
 }
+
+/**
+ * The subject names already in the schedule, each with the details of one of
+ * its lectures.
+ *
+ * Picking a subject in the new-lecture form should not mean retyping the code,
+ * the doctor and the hall every time: a course keeps those, and only the day
+ * and the time change between its sessions. The most recent lecture wins,
+ * because that is the one whose details were last corrected.
+ */
+export function subjectCatalogue(lectures: Lecture[]) {
+  const byName = new Map<string, Lecture>();
+  for (const l of sortByWeek(lectures)) {
+    if (l.subject_name) byName.set(l.subject_name, l);
+  }
+  return [...byName.values()].sort((a, b) => a.subject_name.localeCompare(b.subject_name, "ar"));
+}
+
+/** The fields a subject carries from one session to the next. */
+export type SubjectDetails = Pick<
+  Lecture,
+  "subject_en" | "code" | "doctor" | "hall" | "kind" | "color" | "department"
+>;
+
+/** The keys copied across, listed rather than read off the source. */
+const SUBJECT_DETAIL_KEYS: (keyof SubjectDetails)[] = [
+  "subject_en",
+  "code",
+  "doctor",
+  "hall",
+  "kind",
+  "color",
+  "department",
+];
+
+/**
+ * Fills the details of a subject into a draft, leaving the fields that make a
+ * session different - the day, the times and the notes - as the user set them.
+ * A blank value on the source lecture is skipped so an empty box never wipes
+ * what was already typed.
+ */
+export function applySubjectDetails<T extends Record<string, unknown>>(
+  draft: T,
+  source?: SubjectDetails | null,
+): T {
+  if (!source) return draft;
+  const next: Record<string, unknown> = { ...draft };
+  // Only the listed keys. Walking the source object instead would drag the
+  // source's own day and times along and undo what the user just entered.
+  for (const key of SUBJECT_DETAIL_KEYS) {
+    const value = source[key];
+    if (typeof value === "string" && value.trim()) next[key] = value;
+  }
+  return next as T;
+}

@@ -1,12 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  applySubjectDetails,
   findConflicts,
   findNext,
   groupBySubject,
   lectureStatus,
   searchLectures,
   sortByWeek,
+  subjectCatalogue,
 } from "../src/lib/schedule.ts";
 import type { Lecture } from "../src/lib/db/types.ts";
 
@@ -153,4 +155,59 @@ test("groups by subject and keeps week order inside each group", () => {
   const math = groups.find((g) => g[0].subject_name === "Math");
   assert.deepEqual(math?.map((l) => l.id), ["b", "a"]);
   assert.equal(groups.length, 2);
+});
+
+test("the catalogue lists each subject once, carrying its details", () => {
+  const cat = subjectCatalogue([
+    lecture({ id: "a", subject_name: "OS", code: "OS201", day: 0 }),
+    lecture({ id: "b", subject_name: "OS", code: "OS201", day: 2 }),
+    lecture({ id: "c", subject_name: "Math", code: "MTH101", day: 0 }),
+  ]);
+  assert.deepEqual(
+    cat.map((l) => l.subject_name),
+    ["Math", "OS"],
+  );
+  assert.equal(cat.find((l) => l.subject_name === "OS")?.code, "OS201");
+});
+
+test("the catalogue skips nameless rows", () => {
+  const cat = subjectCatalogue([
+    lecture({ id: "a", subject_name: "" }),
+    lecture({ id: "b", subject_name: "OS" }),
+  ]);
+  assert.equal(cat.length, 1);
+});
+
+test("an empty schedule has no courses to pick", () => {
+  assert.deepEqual(subjectCatalogue([]), []);
+});
+
+test("picking a subject brings its details across", () => {
+  const source = lecture({ code: "PHY101", doctor: "Dr. Ahmed", hall: "Hall 3" });
+  const next = applySubjectDetails(
+    { subject_name: "", code: "", doctor: "", hall: "", day: 3, start_time: "10:00" },
+    source,
+  );
+  assert.equal(next.code, "PHY101");
+  assert.equal(next.doctor, "Dr. Ahmed");
+  assert.equal(next.hall, "Hall 3");
+});
+
+test("picking a subject leaves the session's own fields alone", () => {
+  const source = lecture({ code: "PHY101", day: 0, start_time: "08:00" });
+  const next = applySubjectDetails({ day: 4, start_time: "14:00" }, source);
+  assert.equal(next.day, 4, "the new day must survive");
+  assert.equal(next.start_time, "14:00", "the new time must survive");
+});
+
+test("a blank detail does not wipe what was already typed", () => {
+  const source = lecture({ doctor: "", hall: "Hall 3" });
+  const next = applySubjectDetails({ doctor: "Dr. typed", hall: "" }, source);
+  assert.equal(next.doctor, "Dr. typed", "an empty source value is not a reason to clear it");
+  assert.equal(next.hall, "Hall 3");
+});
+
+test("no source leaves the draft exactly as it was", () => {
+  const draft = { code: "X", day: 2 };
+  assert.deepEqual(applySubjectDetails(draft, null), draft);
 });
