@@ -36,6 +36,19 @@ const unavailable = () =>
     headers: { "Content-Type": "text/html; charset=utf-8" },
   });
 
+/**
+ * The answer for something that is not in the cache and cannot be fetched.
+ *
+ * A page gets a page. Anything else gets an empty body of its own kind:
+ * handing an HTML document to the engine that asked for a script, or to the
+ * router that asked for flight data, turns a missing file into a parse error
+ * that takes the page down instead of one file quietly failing.
+ */
+const missing = (path) =>
+  immutable(path)
+    ? new Response("", { status: 504, headers: { "Content-Type": "application/javascript" } })
+    : new Response("", { status: 504, headers: { "Content-Type": "text/plain" } });
+
 /** Cache storage is not unbounded; drop the oldest entries once it is. */
 const trim = (cache) =>
   cache
@@ -53,6 +66,35 @@ const remember = (cache, request, res) => {
   cache.put(request, copy).then(() => trim(cache)).catch(() => undefined);
 };
 
+/**
+ * Reads the pages just cached and keeps the build assets they name.
+ *
+ * Precaching a page is only half of it: an offline load gets the HTML and then
+ * asks for `/_next/static/...`, and if those are missing the browser is handed
+ * something it cannot run and the page comes up blank. The chunk names are
+ * hashed per build, so they can only be learned from markup that has actually
+ * been served - which is what this does for the shell pages.
+ */
+const warmShellAssets = async (cache) => {
+  const pages = await Promise.allSettled(
+    SHELL.map((p) => {
+      // Resolved here rather than left to `new Request` so the worker does not
+      // depend on an implicit base, and so the same code can be exercised off
+      // a browser.
+      const url = new URL(p, self.location.origin).href;
+      return fetch(new Request(url, { cache: "reload" }))
+        .then((r) => (r.ok ? r.text() : ""))
+        .catch(() => "");
+    }),
+  );
+  const assets = new Set();
+  for (const page of pages) {
+    if (page.status !== "fulfilled" || !page.value) continue;
+    for (const m of page.value.matchAll(/\/_next\/static\/[^"'\\\s<>]+/g)) assets.add(m[0]);
+  }
+  await Promise.allSettled([...assets].map((a) => cache.add(a)));
+};
+
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
@@ -60,7 +102,9 @@ self.addEventListener("install", (event) => {
       // Individually, so one page that has moved cannot leave the app with no
       // worker at all. `addAll` rejects as a unit, and a rejected install means
       // the next load has nothing to answer from when the network is gone.
-      .then((cache) => Promise.allSettled(SHELL.map((p) => cache.add(p))))
+      .then((cache) =>
+        Promise.allSettled(SHELL.map((p) => cache.add(p))).then(() => warmShellAssets(cache)),
+      )
       .then(() => self.skipWaiting()),
   );
 });
@@ -140,7 +184,7 @@ self.addEventListener("fetch", (event) => {
           remember(cache, request, res);
           return res;
         } catch {
-          return unavailable();
+          return missing(url.pathname);
         }
       }),
     );
@@ -155,7 +199,12 @@ self.addEventListener("fetch", (event) => {
         return res;
       } catch {
         const hit = await cache.match(request);
-        return hit ?? unavailable();
+        // A route asked for by the router rather than typed in the bar: the
+        // shell is the closest thing to the answer, and it is a real page.
+        if (hit) return hit;
+        const isDocument = request.headers.get("accept")?.includes("text/html");
+        if (isDocument) return (await cache.match("/")) ?? unavailable();
+        return missing(url.pathname);
       }
     }),
   );

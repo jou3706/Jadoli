@@ -7,10 +7,14 @@ const ORIGIN = "https://jadoli.test";
 const SW = new URL("../public/sw.js", import.meta.url);
 
 /** A response shaped like the ones `fetch` hands the worker. */
-const ok = (body: string) => {
-  const res = { ok: true, status: 200, type: "basic", body, clone: () => ok(body) };
-  return res;
-};
+const ok = (body: string) => ({
+  ok: true,
+  status: 200,
+  type: "basic",
+  body,
+  text: async () => body,
+  clone: () => ok(body),
+});
 
 type Entry = { key: string; body: string };
 
@@ -48,6 +52,7 @@ type Harness = {
   listeners: Record<string, (e: never) => void>;
   calls: string[];
   setNet: (ok: boolean) => void;
+  setReload: (v: boolean) => void;
   caches: ReturnType<typeof fakeCaches>;
   fetch: (r: { url: string; mode: string }) => Promise<unknown>;
 };
@@ -56,12 +61,27 @@ async function boot(opts: { online?: boolean; cached?: Entry[] } = {}): Promise<
   const source = await readFile(SW, "utf8");
   const listeners: Record<string, (e: never) => void> = {};
   const calls: string[] = [];
-  const net = { up: opts.online ?? true };
+  const net = { up: opts.online ?? true, reload: false };
   const caches = fakeCaches(opts.cached ?? []);
 
-  const fetchMock = async (request: { url: string }) => {
+  const fetchMock = async (request: { url: string; cache?: string }) => {
     calls.push(request.url);
     if (!net.up) throw new TypeError("Failed to fetch");
+    if (request.cache === "reload") net.reload = true;
+    // A real page names the build assets it needs; the worker has to learn
+    // those names from the markup, since they are hashed per build.
+    const path = new URL(request.url).pathname;
+    // The precached shell pages name their assets; nothing else does, so a
+    // route outside SHELL is distinguishable by its body.
+    if (path === "/" || /^\/(week|gpa|events|manifest\.json|icon\.svg)$/.test(path)) {
+      return ok(
+        `<!doctype html><script src="/_next/static/chunks/app/layout-aaa.js"></script>` +
+          `<link rel="stylesheet" href="/_next/static/css/bbb.css">`,
+      );
+    }
+    // A reload of a visited route asks for it with `cache: "reload"`, which is
+    // what the worker uses while reading the shell at install.
+    if (net.reload) return ok(`reloaded:${request.url}`);
     return ok(`net:${request.url}`);
   };
 
@@ -91,6 +111,9 @@ async function boot(opts: { online?: boolean; cached?: Entry[] } = {}): Promise<
     caches,
     setNet: (v) => {
       net.up = v;
+    },
+    setReload: (v: boolean) => {
+      net.reload = v;
     },
     fetch: fetchMock,
   };
@@ -127,6 +150,61 @@ const install = async (h: Harness) => {
   });
   await waited;
 };
+
+test("install also keeps the build assets the shell pages name", async () => {
+  // Caching the page alone is not enough: the offline load then asks for the
+  // chunks and the browser is handed something it cannot run.
+  const h = await boot();
+  await install(h);
+  assert.ok(
+    h.caches.store.has(`${ORIGIN}/_next/static/chunks/app/layout-aaa.js`),
+    "the shell page's script must be cached at install",
+  );
+  assert.ok(
+    h.caches.store.has(`${ORIGIN}/_next/static/css/bbb.css`),
+    "the shell page's stylesheet must be cached at install",
+  );
+});
+
+test("an uncached script offline is not answered with a web page", async () => {
+  const h = await boot();
+  await install(h);
+  h.setNet(false);
+  const { res } = await handle(h, `${ORIGIN}/_next/static/chunks/app/(app)/gpa/page-xyz.js`);
+  assert.equal(
+    (res as { status: number }).status,
+    504,
+    "a missing script must fail as a script, not parse as html",
+  );
+  assert.equal(
+    (res as unknown as Response).headers.get("Content-Type"),
+    "application/javascript",
+  );
+});
+
+test("a missing script still answers with a body rather than nothing", async () => {
+  const h = await boot();
+  await install(h);
+  h.setNet(false);
+  const { res } = await handle(h, `${ORIGIN}/_next/static/chunks/nope.js`);
+  assert.ok(res, "respondWith must never be given undefined");
+});
+
+test("a document asked for by the router falls back to the shell", async () => {
+  const h = await boot();
+  await install(h);
+  h.setNet(false);
+  const request = { url: `${ORIGIN}/import`, method: "GET", mode: "no-cors" };
+  let answer: unknown;
+  (h.listeners.fetch as (e: unknown) => void)({
+    request: { ...request, headers: new Headers({ accept: "text/html" }) },
+    respondWith: (p: Promise<unknown>) => {
+      answer = p;
+    },
+  });
+  const res = (await answer) as { body: string };
+  assert.equal(res.body, `body:${ORIGIN}/`, "the shell answers instead of a parse error");
+});
 
 test("a first visit online fills the shell cache", async () => {
   const h = await boot();
@@ -199,12 +277,19 @@ test("every branch answers offline instead of rejecting", async () => {
 });
 
 test("a page visited online is the page that opens offline", async () => {
+  // Not one of the precached routes, so the only copy that can answer is the
+  // one the worker put away when the page was actually served.
   const h = await boot();
   await install(h);
-  await handle(h, "/events", "navigate");
+  await handle(h, "/import", "navigate");
   h.setNet(false);
-  const res = await handle(h, "/events", "navigate");
-  assert.equal((res.res as { body: string }).body, `net:${ORIGIN}/events`);
+  h.setReload(false);
+  const res = await handle(h, "/import", "navigate");
+  assert.equal(
+    (res.res as { body: string }).body,
+    `reloaded:${ORIGIN}/import`,
+    "the route the user visited must be the route they get back",
+  );
 });
 
 test("an unvisited route offline falls back to the shell", async () => {
