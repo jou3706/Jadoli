@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ChevronDown, ChevronUp, FileUp, Link2, Loader2, Plus } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, FileUp, Link2, Loader2, Plus } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { useToast } from "@/components/ui/toast";
 import { safeUrl } from "@/lib/materials";
@@ -37,11 +37,12 @@ export function AddMaterialRow({
 }: {
   subjectKey: string;
   /**
-   * Materials the user owns that are not listed for this subject yet. Left out
-   * on the subject card, where the list above already shows this subject's own
-   * materials and the row is only a drop target.
+   * Every material in the account, each flagged with whether this subject
+   * already shows it. Left out on the subject card, where the list above
+   * already shows this subject's own materials and the row is only a drop
+   * target.
    */
-  available?: Material[];
+  available?: { material: Material; listed: boolean }[];
   /** Copies an existing material into this subject. */
   onReuse?: (m: Material) => void;
   onAdd: (f: { path: string; url: string; title: string; size: number }) => void;
@@ -125,15 +126,21 @@ export function AddMaterialRow({
 
           {open && (
             <ul className="max-h-64 divide-y overflow-y-auto border-t bg-muted/30">
-              {available.map((m) => (
+              {available.map(({ material: m, listed }) => (
                 <li key={m.id}>
                   <button
                     type="button"
+                    disabled={listed}
                     onClick={() => {
                       onReuse?.(m);
                       setOpen(false);
                     }}
-                    className="flex w-full items-center gap-3 px-3 py-2 text-start text-sm transition-colors hover:bg-accent"
+                    className={cn(
+                      "flex w-full items-center gap-3 px-3 py-2 text-start text-sm transition-colors",
+                      listed
+                        ? "cursor-default opacity-55"
+                        : "hover:bg-accent",
+                    )}
                   >
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-medium">{m.title}</span>
@@ -142,7 +149,14 @@ export function AddMaterialRow({
                         {m.size > 0 && ` · ${formatBytes(m.size)}`}
                       </span>
                     </span>
-                    <Plus className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    {listed ? (
+                      <Check
+                        className="h-4 w-4 shrink-0 text-muted-foreground"
+                        aria-label={tr("موجودة بالفعل", "Already added")}
+                      />
+                    ) : (
+                      <Plus className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    )}
                   </button>
                 </li>
               ))}

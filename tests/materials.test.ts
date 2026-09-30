@@ -5,7 +5,7 @@ import {
   detectKind,
   groupMaterials,
   kindMeta,
-  reusableMaterials,
+  pickerMaterials,
   safeUrl,
   sharedFileCounts,
 } from "../src/lib/materials.ts";
@@ -92,7 +92,8 @@ test("grouping an empty list yields nothing", () => {
 
 /* ── reusing a material that is already in the account ─────────── */
 
-const mat = (title: string, subject_key: string, file_path = "") => ({
+const mat = (title: string, subject_key = "OS", file_path = "", id?: string) => ({
+  id: id ?? title,
   title,
   subject_key,
   file_path,
@@ -100,39 +101,36 @@ const mat = (title: string, subject_key: string, file_path = "") => ({
 
 test("a material from another subject can be reused", () => {
   const all = [mat("OS slides", "Math"), mat("OS notes", "OS")];
-  const free = reusableMaterials(all, "Physics", []);
+  const rows = pickerMaterials(all, []);
   assert.deepEqual(
-    free.map((m) => m.title),
+    rows.map((r) => r.material.title),
     ["OS slides", "OS notes"],
   );
-});
-
-test("a subject's own materials are not offered back to it", () => {
-  const all = [mat("OS slides", "OS"), mat("Math notes", "Math")];
-  const free = reusableMaterials(all, "OS", []);
-  assert.deepEqual(
-    free.map((m) => m.title),
-    ["Math notes"],
+  assert.ok(
+    rows.every((r) => !r.listed),
+    "nothing was listed here yet",
   );
 });
 
-test("an already listed title is not offered again", () => {
-  const all = [mat("OS slides", "Math"), mat("OS notes", "Math")];
-  const free = reusableMaterials(all, "Physics", [mat("OS slides", "Physics")]);
+test("a material already in this subject's list is flagged, not hidden", () => {
+  const rows = pickerMaterials([mat("a", "Math"), mat("b", "Math")], [mat("a", "OS")]);
+  assert.equal(rows.length, 2, "the listed one still appears");
   assert.deepEqual(
-    free.map((m) => m.title),
-    ["OS notes"],
-    "a duplicate name on screen reads as a mistake",
+    rows.map((r) => r.listed),
+    [true, false],
   );
 });
 
-test("the title check ignores case", () => {
-  const all = [mat("OS Slides", "Math")];
-  assert.deepEqual(reusableMaterials(all, "Physics", [mat("os slides", "Physics")]), []);
+test("a lone material still shows, so the row is never blank", () => {
+  // One subject holding one material. Dropping it from the list would leave
+  // the row looking exactly as it did before the feature existed.
+  const rows = pickerMaterials([mat("lec 1", "OS")], [mat("lec 1", "OS")]);
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].listed, true);
 });
 
-test("a subject with nothing to reuse offers nothing", () => {
-  assert.deepEqual(reusableMaterials([mat("OS", "OS")], "OS", []), []);
+test("an account with no materials offers nothing", () => {
+  assert.deepEqual(pickerMaterials([], []), []);
 });
 
 /* ── keeping a file that another row still needs ───────────────── */

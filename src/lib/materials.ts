@@ -76,19 +76,20 @@ export function groupMaterials<T extends { subject_key: string }>(rows: T[]) {
 }
 
 /**
- * Materials the account already holds that this subject does not list yet, so
- * one can be reused instead of uploading the same file twice. Already-listed
- * titles are excluded because a duplicate name reads as a mistake on screen.
+ * Every material in the account, each flagged with whether this subject
+ * already shows it.
+ *
+ * The subject's own materials stay in the list on purpose. With one subject
+ * holding one material there is nothing else to offer, and hiding them would
+ * leave the row looking exactly as it did before the feature existed. The flag
+ * is what stops a duplicate being added, not the list being emptied.
  */
-export function reusableMaterials<T extends { title: string; subject_key: string }>(
+export function pickerMaterials<T extends { id: string }>(
   all: T[],
-  subject: string,
   listed: T[],
-): T[] {
-  const seen = new Set(listed.map((m) => m.title.toLowerCase()));
-  return all.filter(
-    (m) => (m.subject_key ?? "").trim() !== subject && !seen.has(m.title.toLowerCase()),
-  );
+): { material: T; listed: boolean }[] {
+  const ids = new Set(listed.map((m) => m.id));
+  return all.map((material) => ({ material, listed: ids.has(material.id) }));
 }
 
 /**

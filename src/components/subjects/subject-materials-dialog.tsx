@@ -17,7 +17,7 @@ import { useToast } from "@/components/ui/toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { detectKind, kindMeta, reusableMaterials, safeUrl, sharedFileCounts, type MaterialKindId } from "@/lib/materials";
+import { detectKind, kindMeta, pickerMaterials, safeUrl, sharedFileCounts, type MaterialKindId } from "@/lib/materials";
 import { formatBytes, removeStoredFile } from "@/lib/db/storage";
 import { AddMaterialRow } from "@/components/subjects/add-material-row";
 import { cn } from "@/lib/utils";
@@ -200,9 +200,14 @@ export function SubjectMaterialsDialog({
    * Anything the account already holds that is not in this list yet. A reuse
    * makes a second row share the file, so the delete below checks the counts.
    */
+  /**
+   * Every material in the account, flagged with the ones this subject already
+   * shows. Keeping them in the list is what makes the row visible at all when
+   * the account holds a single subject.
+   */
   const available = useMemo(
-    () => reusableMaterials(allMaterials, name, materials),
-    [allMaterials, materials, name],
+    () => pickerMaterials(allMaterials, materials),
+    [allMaterials, materials],
   );
   const sharedFiles = useMemo(() => sharedFileCounts(allMaterials), [allMaterials]);
 

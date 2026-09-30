@@ -113,6 +113,9 @@ function SubjectCard({
    * is why deleting one must not remove the file.
    */
   function reuseMaterial(m: Material) {
+    // The picker marks what is already here, but a double click can still land
+    // two copies, and the unique index would reject the second one anyway.
+    if (materials.some((x) => x.id === m.id)) return;
     ensureRow();
     void createMaterial({
       title: m.title,
