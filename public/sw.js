@@ -1,20 +1,57 @@
 /*
  * Offline shell.
  *
- * The cache name is tied to the build rather than left fixed. Next.js puts a
+ * The cache name is a hand-written constant, bumped by hand. Next.js puts a
  * content hash in every chunk filename, so a new deploy always produces new
- * URLs, but a fixed cache name would keep serving whatever was stored under
- * those URLs before - which is how a deploy could be live on the server and
- * still show the old screen in the browser.
+ * URLs, and bumping the name is what lets `activate` drop the previous cache
+ * instead of leaving it to sit in storage forever.
  *
  * Navigations go to the network first and fall back to the shell. Everything
  * else is served from the cache only when the network is unreachable, so a
- * release reaches people on their next load instead of whenever they happen
- * to clear a cache.
+ * release reaches people on their next load instead of whenever they happen to
+ * clear a cache.
+ *
+ * Build assets are the exception: their names are hashed by the build, so a
+ * cached one is always the right file and can never go stale. They are served
+ * from the cache first, which is what makes the first offline load work at all
+ * - see `warm` below.
  */
 
-const VERSION = "jadoli-v3";
+const VERSION = "jadoli-v4";
 const SHELL = ["/", "/week", "/gpa", "/events", "/manifest.json", "/icon.svg"];
+/** Enough for a few builds' worth of chunks before the oldest are dropped. */
+const MAX_STATIC = 150;
+
+const OFFLINE_HTML =
+  "<!doctype html><meta charset=utf-8><title>Offline</title>" +
+  '<p style="font:16px system-ui;padding:2rem">You are offline and this page ' +
+  "was never loaded while you were connected.</p>";
+
+/** Hashed by the build, so a hit is correct by definition and never stale. */
+const immutable = (path) => path.startsWith("/_next/static/");
+
+const unavailable = () =>
+  new Response(OFFLINE_HTML, {
+    status: 503,
+    headers: { "Content-Type": "text/html; charset=utf-8" },
+  });
+
+/** Cache storage is not unbounded; drop the oldest entries once it is. */
+const trim = (cache) =>
+  cache
+    .keys()
+    .then((keys) =>
+      keys.length > MAX_STATIC
+        ? Promise.all(keys.slice(0, keys.length - MAX_STATIC).map((k) => cache.delete(k)))
+        : undefined,
+    )
+    .catch(() => undefined);
+
+const remember = (cache, request, res) => {
+  if (!res || !res.ok) return;
+  const copy = res.clone();
+  cache.put(request, copy).then(() => trim(cache)).catch(() => undefined);
+};
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -29,7 +66,7 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("activate", (event) => {
-  const keep = new Set([VERSION, ...SHELL.map((p) => new Request(p).url)]);
+  const keep = new Set([VERSION]);
   event.waitUntil(
     caches
       .keys()
@@ -37,6 +74,27 @@ self.addEventListener("activate", (event) => {
       // Take over the open tabs straight away, otherwise the old worker keeps
       // answering until every one of them is closed.
       .then(() => self.clients.claim()),
+  );
+});
+
+/**
+ * The page reports the assets it actually used, so they are in the cache
+ * before the user loses signal.
+ *
+ * The install step can only precache the handful of pages listed in SHELL, and
+ * it cannot know the hashed chunk names - those exist only once a build has
+ * been served. On a first visit the page loads its own chunks before this
+ * worker is even in control, so without this the cache holds HTML whose
+ * JavaScript was never stored, and going offline shows a blank page.
+ */
+self.addEventListener("message", (event) => {
+  const data = event.data;
+  if (!data || data.type !== "jadoli:warm" || !Array.isArray(data.urls)) return;
+  const urls = data.urls.filter(
+    (u) => typeof u === "string" && u.startsWith(self.location.origin),
+  );
+  event.waitUntil(
+    caches.open(VERSION).then((cache) => Promise.allSettled(urls.map((u) => cache.add(u)))),
   );
 });
 
@@ -51,41 +109,54 @@ self.addEventListener("fetch", (event) => {
 
   if (request.mode === "navigate") {
     event.respondWith(
-      fetch(request)
-        .then((res) => {
-          // Store the page that was actually served, so a route visited while
-          // online is the route that opens while offline.
-          if (res.ok) {
-            const copy = res.clone();
-            caches.open(VERSION).then((cache) => cache.put(request, copy));
-          }
+      caches.open(VERSION).then((cache) =>
+        fetch(request)
+          .then((res) => {
+            // Store the page that was actually served, so a route visited while
+            // online is the route that opens while offline.
+            if (res.ok) remember(cache, request, res);
+            return res;
+          })
+          .catch(async () => {
+            const hit = await cache.match(request);
+            if (hit) return hit;
+            const shell = await cache.match("/");
+            // A rejected or undefined promise here takes the whole page down
+            // with an InvalidStateError, so there is always an answer.
+            return shell ?? unavailable();
+          }),
+      ),
+    );
+    return;
+  }
+
+  if (immutable(url.pathname)) {
+    event.respondWith(
+      caches.open(VERSION).then(async (cache) => {
+        const hit = await cache.match(request);
+        if (hit) return hit;
+        try {
+          const res = await fetch(request);
+          remember(cache, request, res);
           return res;
-        })
-        .catch(async () => {
-          const hit = await caches.match(request);
-          if (hit) return hit;
-          const shell = await caches.match("/");
-          return (
-            shell ??
-            new Response(
-              "<!doctype html><meta charset=utf-8><p>Offline and this page was never visited.</p>",
-              { status: 503, headers: { "Content-Type": "text/html; charset=utf-8" } },
-            )
-          );
-        }),
+        } catch {
+          return unavailable();
+        }
+      }),
     );
     return;
   }
 
   event.respondWith(
-    fetch(request)
-      .then((res) => {
-        if (res.ok && res.type === "basic") {
-          const copy = res.clone();
-          caches.open(VERSION).then((cache) => cache.put(request, copy));
-        }
+    caches.open(VERSION).then(async (cache) => {
+      try {
+        const res = await fetch(request);
+        if (res.ok) remember(cache, request, res);
         return res;
-      })
-      .catch(() => caches.match(request)),
+      } catch {
+        const hit = await cache.match(request);
+        return hit ?? unavailable();
+      }
+    }),
   );
 });
