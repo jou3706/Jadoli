@@ -73,7 +73,12 @@ async function boot(opts: { online?: boolean; cached?: Entry[] } = {}): Promise<
     const path = new URL(request.url).pathname;
     // The precached shell pages name their assets; nothing else does, so a
     // route outside SHELL is distinguishable by its body.
-    if (path === "/" || /^\/(week|gpa|events|manifest\.json|icon\.svg)$/.test(path)) {
+    const SHELL_ROUTE =
+      path === "/" ||
+      /^\/(login|register|forgot-password|reset-password|week|gpa|events|attendance|subjects|halls|import|assistant|widget|manifest\.json|icon\.svg)$/.test(
+        path,
+      );
+    if (SHELL_ROUTE) {
       return ok(
         `<!doctype html><script src="/_next/static/chunks/app/layout-aaa.js"></script>` +
           `<link rel="stylesheet" href="/_next/static/css/bbb.css">`,
@@ -190,20 +195,28 @@ test("a missing script still answers with a body rather than nothing", async () 
   assert.ok(res, "respondWith must never be given undefined");
 });
 
-test("a document asked for by the router falls back to the shell", async () => {
+test("a document asked for by the router gets its own page", async () => {
   const h = await boot();
   await install(h);
   h.setNet(false);
-  const request = { url: `${ORIGIN}/import`, method: "GET", mode: "no-cors" };
   let answer: unknown;
   (h.listeners.fetch as (e: unknown) => void)({
-    request: { ...request, headers: new Headers({ accept: "text/html" }) },
+    request: {
+      url: `${ORIGIN}/import`,
+      method: "GET",
+      mode: "no-cors",
+      headers: new Headers({ accept: "text/html" }),
+    },
     respondWith: (p: Promise<unknown>) => {
       answer = p;
     },
   });
-  const res = (await answer) as { body: string };
-  assert.equal(res.body, `body:${ORIGIN}/`, "the shell answers instead of a parse error");
+  const res = (await answer) as { body: string; status: number };
+  assert.equal(
+    res.body,
+    `body:${ORIGIN}/import`,
+    "the router must get the route it asked for, not another route's page",
+  );
 });
 
 test("a first visit online fills the shell cache", async () => {
@@ -277,29 +290,78 @@ test("every branch answers offline instead of rejecting", async () => {
 });
 
 test("a page visited online is the page that opens offline", async () => {
-  // Not one of the precached routes, so the only copy that can answer is the
-  // one the worker put away when the page was actually served.
+  // A route outside the precached shell, so the only copy that can answer is
+  // the one the worker put away when the page was actually served.
   const h = await boot();
   await install(h);
-  await handle(h, "/import", "navigate");
+  await handle(h, "/share/abc123", "navigate");
   h.setNet(false);
   h.setReload(false);
-  const res = await handle(h, "/import", "navigate");
+  const res = await handle(h, "/share/abc123", "navigate");
   assert.equal(
     (res.res as { body: string }).body,
-    `reloaded:${ORIGIN}/import`,
+    `reloaded:${ORIGIN}/share/abc123`,
     "the route the user visited must be the route they get back",
   );
 });
 
-test("an unvisited route offline falls back to the shell", async () => {
+test("a route that was never cached says so rather than loading forever", async () => {
+  // The app routes on the client. Answering an uncached route with the home
+  // page leaves the browser holding this URL and the home page's data, so it
+  // asks the network for the difference and sits loading until it comes back.
   const h = await boot();
   await install(h);
   h.setNet(false);
-  // /import is a real route but not in the precached shell, so there is
-  // nothing but the home page to answer it.
-  const res = await handle(h, "/import", "navigate");
-  assert.equal((res.res as { body: string }).body, `body:${ORIGIN}/`);
+  const res = await handle(h, "/share/abc123", "navigate");
+  assert.equal((res.res as { status: number }).status, 503);
+  assert.match(
+    (res.res as unknown as Response).headers.get("Content-Type") ?? "",
+    /text\/html/,
+    "an uncached route must not be answered with another route's page",
+  );
+});
+
+test("every route the app can open is reachable offline", async () => {
+  // /login is the one that was reported: refreshing it offline hung on a
+  // loading state because it was not in the cached shell.
+  const h = await boot();
+  await install(h);
+  h.setNet(false);
+  const routes = [
+    "/",
+    "/login",
+    "/register",
+    "/forgot-password",
+    "/reset-password",
+    "/week",
+    "/gpa",
+    "/events",
+    "/attendance",
+    "/subjects",
+    "/halls",
+    "/import",
+    "/assistant",
+    "/widget",
+  ];
+  for (const r of routes) {
+    const res = await handle(h, r, "navigate");
+    assert.notEqual(
+      (res.res as { status: number }).status,
+      503,
+      `${r} must open offline - it hung the loading state when it was missing`,
+    );
+  }
+});
+
+test("install warms the assets of every route, not just the home page", async () => {
+  const h = await boot();
+  await install(h);
+  const scripts = [...h.caches.store.keys()].filter((k) => k.includes("/_next/static/"));
+  assert.ok(scripts.length > 0, "the shell pages' assets must be cached at install");
+  assert.ok(
+    scripts.some((s) => s.endsWith("layout-aaa.js")),
+    "the layout script every route needs must be cached",
+  );
 });
 
 test("live data and the server routes are never answered from the cache", async () => {

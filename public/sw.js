@@ -17,8 +17,33 @@
  * - see `warm` below.
  */
 
-const VERSION = "jadoli-v4";
-const SHELL = ["/", "/week", "/gpa", "/events", "/manifest.json", "/icon.svg"];
+const VERSION = "jadoli-v5";
+/**
+ * Every route the app can open, because a page that is not cached is not
+ * merely missing - it is worse than missing. The worker falls back to the home
+ * page, and this is a client-routed app: the browser then has a URL for one
+ * route and the data for another, asks the network for the route it is on, and
+ * sits in its loading state until the network comes back. A route nobody can
+ * reach offline is a route that looks like a broken app.
+ */
+const SHELL = [
+  "/",
+  "/login",
+  "/register",
+  "/forgot-password",
+  "/reset-password",
+  "/week",
+  "/gpa",
+  "/events",
+  "/attendance",
+  "/subjects",
+  "/halls",
+  "/import",
+  "/assistant",
+  "/widget",
+  "/manifest.json",
+  "/icon.svg",
+];
 /** Enough for a few builds' worth of chunks before the oldest are dropped. */
 const MAX_STATIC = 150;
 
@@ -164,10 +189,12 @@ self.addEventListener("fetch", (event) => {
           .catch(async () => {
             const hit = await cache.match(request);
             if (hit) return hit;
-            const shell = await cache.match("/");
-            // A rejected or undefined promise here takes the whole page down
-            // with an InvalidStateError, so there is always an answer.
-            return shell ?? unavailable();
+            // A page for a different route is not a fallback, it is a wrong
+            // answer: this app routes on the client, so the browser would hold
+            // the URL it asked for and the data for the home page, ask the
+            // network for the difference, and wait on it. Better to say plainly
+            // that this page is not available offline.
+            return unavailable();
           }),
       ),
     );
@@ -199,12 +226,17 @@ self.addEventListener("fetch", (event) => {
         return res;
       } catch {
         const hit = await cache.match(request);
-        // A route asked for by the router rather than typed in the bar: the
-        // shell is the closest thing to the answer, and it is a real page.
         if (hit) return hit;
+        // The router asking for a route it has not cached gets the route's own
+        // page when there is one, and otherwise the plain offline notice - not
+        // another route's data, which the client router cannot reconcile.
+        const path = url.pathname;
         const isDocument = request.headers.get("accept")?.includes("text/html");
-        if (isDocument) return (await cache.match("/")) ?? unavailable();
-        return missing(url.pathname);
+        if (isDocument) {
+          const same = await cache.match(path);
+          return same ?? unavailable();
+        }
+        return missing(path);
       }
     }),
   );
