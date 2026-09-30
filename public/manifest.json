@@ -1,0 +1,45 @@
+{
+  "name": "جدولي الدراسي",
+  "short_name": "جدولي",
+  "description": "نظّم جدولك الدراسي، مواعيدك، درجاتك ومناسبات الجامعة في مكان واحد.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#4f46e5",
+  "dir": "rtl",
+  "lang": "ar",
+  "categories": ["education", "productivity"],
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    { "name": "الأسبوع", "url": "/week" },
+    { "name": "المساعد", "url": "/assistant" },
+    { "name": "المعدل", "url": "/gpa" }
+  ]
+}

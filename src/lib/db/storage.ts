@@ -1,0 +1,121 @@
+"use client";
+
+/**
+ * File storage for materials and subject covers.
+ *
+ * Files dropped on a subject are uploaded to the Supabase `materials` bucket
+ * (see supabase/02-subjects-and-storage.sql); the row in `materials` only keeps
+ * the public URL. Local mode has nowhere to put a binary, so `canStoreFiles()`
+ * is false there and the UI offers links only.
+ */
+
+import { getSupabase } from "./supabase-client";
+
+export const BUCKET = "materials";
+
+/** Refuse anything bigger than this — a video lecture is not a study note. */
+export const MAX_FILE_BYTES = 25 * 1024 * 1024;
+
+export const canStoreFiles = () => getSupabase() !== null;
+
+export const ACCEPTED = [
+  ".pdf",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".webp",
+  ".gif",
+  ".svg",
+  ".ppt",
+  ".pptx",
+  ".key",
+  ".odp",
+  ".doc",
+  ".docx",
+  ".odt",
+  ".rtf",
+  ".txt",
+  ".md",
+  ".csv",
+  ".xls",
+  ".xlsx",
+  ".zip",
+].join(",");
+
+/** Strips any path from the name and keeps only filename-safe characters. */
+export function safeFileName(name: string): string {
+  const base = (name ?? "").split(/[\\/]/).pop() ?? "file";
+  const cleaned = base
+    .replace(/[^\w.\- ]+/g, "_")
+    .replace(/\s+/g, " ")
+    .trim();
+  // "..." and "." are truthy but useless as a filename, so require a real stem.
+  const hasStem = /\w/.test(cleaned.replace(/\./g, ""));
+  const safe = hasStem ? cleaned : "file";
+  // Keep the extension: kind detection and the open/download behaviour rely on it.
+  return safe.length > 80 ? safe.slice(safe.length - 80) : safe;
+}
+
+export function formatBytes(bytes: number): string {
+  if (!bytes || bytes < 0) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** uid/<folder>/<timestamp>-<name> — the policies only allow the first segment. */
+function objectPath(uid: string, folder: string, name: string): string {
+  const stamp = Date.now().toString(36);
+  return `${uid}/${folder}/${stamp}-${safeFileName(name)}`;
+}
+
+async function currentUserId(): Promise<string> {
+  const sb = getSupabase();
+  if (!sb) throw new Error("NO_SUPABASE");
+  // getSession reads the persisted session, so this costs no network call.
+  const { data, error } = await sb.auth.getSession();
+  const id = data.session?.user?.id;
+  if (error || !id) throw new Error("NO_SESSION");
+  return id;
+}
+
+async function upload(
+  folder: string,
+  name: string,
+  body: Blob | ArrayBuffer,
+  contentType: string,
+): Promise<{ path: string; url: string }> {
+  const sb = getSupabase();
+  if (!sb) throw new Error("NO_SUPABASE");
+  const uid = await currentUserId();
+  const path = objectPath(uid, folder, name);
+
+  const { error } = await sb.storage.from(BUCKET).upload(path, body, {
+    contentType,
+    upsert: false,
+    cacheControl: "3600",
+  });
+  if (error) throw new Error(error.message);
+
+  const { data } = sb.storage.from(BUCKET).getPublicUrl(path);
+  return { path, url: data.publicUrl };
+}
+
+/** Uploads a file the user dropped and returns the path + public URL. */
+export function saveMaterialFile(file: File) {
+  return upload("files", file.name, file, file.type || "application/octet-stream");
+}
+
+/** Stores a generated cover so it survives without bloating `subjects`. */
+export function saveCoverImage(blob: Blob, name: string) {
+  return upload("covers", `${name}.png`, blob, "image/png");
+}
+
+export async function removeStoredFile(path: string): Promise<void> {
+  const sb = getSupabase();
+  if (!sb || !path) return;
+  const uid = await currentUserId();
+  // Defence in depth: the policy blocks this, and so does this guard.
+  if (!path.startsWith(`${uid}/`)) return;
+  await sb.storage.from(BUCKET).remove([path]);
+}
