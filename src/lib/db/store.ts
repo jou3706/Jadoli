@@ -58,6 +58,39 @@ function subscribe(cb: () => void) {
 }
 
 /**
+ * Whether the app is talking to the server, and how many changes are still
+ * waiting to be sent.
+ *
+ * `pending` is the number to show the user when it is not zero: the rows are
+ * saved on the device, but nobody else can see them yet.
+ */
+export function useOffline() {
+  const read = (): { online: boolean; pending: number } =>
+    getBackend().offlineStatus?.() ?? { online: true, pending: 0 };
+
+  const [status, setStatus] = useState(read);
+
+  useEffect(() => {
+    const b = getBackend();
+    const update = () => setStatus(read());
+    update();
+    const off = b.subscribeOffline?.(update);
+    // The browser is the only thing that knows the network went away, and it
+    // says so without being asked.
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    return () => {
+      off?.();
+      window.removeEventListener("online", update);
+      window.removeEventListener("offline", update);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return status;
+}
+
+/**
  * Run a query and re-run it whenever local data changes. Drop `deps` to
  * re-query on every data change, pass them to scope the re-fetch.
  */

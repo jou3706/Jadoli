@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Bell, BellRing, LogOut, Search, X } from "lucide-react";
+import { Bell, BellRing, CloudOff, CloudUpload, LogOut, Search, X } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/db/auth";
-import { useList } from "@/lib/db/store";
+import { useList, useOffline } from "@/lib/db/store";
 import { useNotifications } from "@/hooks/use-notifications";
 import { useScheduleContext } from "@/lib/schedule-context";
 import { nowCairo } from "@/lib/utils";
@@ -13,6 +13,47 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { LangToggle } from "./lang-toggle";
 import { ThemeToggle } from "./theme-toggle";
+
+/**
+ * Says plainly whether the app is looking at live data, and how much is still
+ * waiting to be sent.
+ *
+ * Without this, working offline is indistinguishable from a broken app: the
+ * schedule is on screen either way, so the only honest signal is the one that
+ * names the state and the number of changes the server has not seen.
+ */
+function OfflineBadge() {
+  const { tr } = useI18n();
+  const { online, pending } = useOffline();
+
+  if (online && pending === 0) return null;
+
+  const label = !online
+    ? pending > 0
+      ? tr(
+          `أوفلاين — ${pending} تعديل محفوظ على الجهاز`,
+          `Offline — ${pending} change${pending === 1 ? "" : "s"} saved on this device`,
+        )
+      : tr("أوفلاين — بتعرض البيانات المحفوظة", "Offline — showing saved data")
+    : tr(
+        `بعت ${pending} تعديل`, 
+        `Sending ${pending} change${pending === 1 ? "" : "s"}`,
+      );
+
+  return (
+    <span
+      title={label}
+      className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${
+        online
+          ? "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300"
+          : "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300"
+      }`}
+    >
+      {online ? <CloudUpload className="h-3.5 w-3.5" /> : <CloudOff className="h-3.5 w-3.5" />}
+      <span className="hidden sm:inline">{pending > 0 ? pending : tr("أوفلاين", "Offline")}</span>
+    </span>
+  );
+}
 
 export function Header({
   editMode,
@@ -97,6 +138,8 @@ export function Header({
         )}
 
         <div className="ms-auto flex items-center gap-1.5">
+          <OfflineBadge />
+
           <div className="relative hidden sm:block">
             <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input

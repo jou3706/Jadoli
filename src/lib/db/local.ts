@@ -50,7 +50,7 @@ function write(db: DB) {
 
 /* ── Sorting ──────────────────────────────────────────────── */
 
-function getField(row: unknown, path: string): unknown {
+export function getField(row: unknown, path: string): unknown {
   return path.split(".").reduce<unknown>((acc, k) => {
     if (acc && typeof acc === "object") return (acc as Record<string, unknown>)[k];
     return undefined;
@@ -61,8 +61,11 @@ function getField(row: unknown, path: string): unknown {
  * Sort spec: `"-created_date"` descending, `"created_date"` ascending,
  * `"field,desc"` for an explicit direction, or an array for several keys,
  * e.g. `["subject_name", "-day"]`.
+ *
+ * Exported because the offline reader has to order a cached snapshot with the
+ * same rules PostgREST would have used for it.
  */
-function applySort<T>(rows: T[], sort?: string | string[]): T[] {
+export function applySort<T>(rows: T[], sort?: string | string[]): T[] {
   if (!sort) return rows;
   const specs = (Array.isArray(sort) ? sort : [sort]).map((s) => {
     const desc = s.startsWith("-");
@@ -89,7 +92,11 @@ function applySort<T>(rows: T[], sort?: string | string[]): T[] {
 
 export type Where = Record<string, unknown>;
 
-function matches(row: unknown, where?: Where): boolean {
+/**
+ * Exported for the offline reader: a cached snapshot is filtered with the same
+ * rules a live `filter()` would have sent to PostgREST.
+ */
+export function matches(row: unknown, where?: Where): boolean {
   if (!where) return true;
   return Object.entries(where).every(([k, v]) => {
     const actual = getField(row, k);
@@ -143,6 +150,14 @@ export interface Backend {
   attachSession?(accessToken: string | null): void;
   /** Supabase only: the caller's user id, written as the row owner. */
   attachUser?(userId: string | null): void;
+  /**
+   * Supabase only: connection state and the size of the unsent write queue, so
+   * the UI can say whether the app is looking at live data.
+   */
+  subscribeOffline?(cb: () => void): () => void;
+  offlineStatus?(): { online: boolean; pending: number };
+  /** Supabase only: sends everything the queue is holding. */
+  sync?(): Promise<void>;
 }
 
 const newId = () =>

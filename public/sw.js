@@ -13,14 +13,17 @@
  * to clear a cache.
  */
 
-const VERSION = "jadoli-v2";
+const VERSION = "jadoli-v3";
 const SHELL = ["/", "/week", "/gpa", "/events", "/manifest.json", "/icon.svg"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
       .open(VERSION)
-      .then((cache) => cache.addAll(SHELL))
+      // Individually, so one page that has moved cannot leave the app with no
+      // worker at all. `addAll` rejects as a unit, and a rejected install means
+      // the next load has nothing to answer from when the network is gone.
+      .then((cache) => Promise.allSettled(SHELL.map((p) => cache.add(p))))
       .then(() => self.skipWaiting()),
   );
 });
@@ -47,7 +50,30 @@ self.addEventListener("fetch", (event) => {
   if (url.pathname.startsWith("/api/")) return;
 
   if (request.mode === "navigate") {
-    event.respondWith(fetch(request).catch(() => caches.match(request).then((hit) => hit ?? caches.match("/"))));
+    event.respondWith(
+      fetch(request)
+        .then((res) => {
+          // Store the page that was actually served, so a route visited while
+          // online is the route that opens while offline.
+          if (res.ok) {
+            const copy = res.clone();
+            caches.open(VERSION).then((cache) => cache.put(request, copy));
+          }
+          return res;
+        })
+        .catch(async () => {
+          const hit = await caches.match(request);
+          if (hit) return hit;
+          const shell = await caches.match("/");
+          return (
+            shell ??
+            new Response(
+              "<!doctype html><meta charset=utf-8><p>Offline and this page was never visited.</p>",
+              { status: 503, headers: { "Content-Type": "text/html; charset=utf-8" } },
+            )
+          );
+        }),
+    );
     return;
   }
 
