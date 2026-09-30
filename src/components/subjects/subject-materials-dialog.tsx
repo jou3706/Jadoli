@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Copy,
   ExternalLink,
@@ -17,7 +17,7 @@ import { useToast } from "@/components/ui/toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { detectKind, kindMeta, safeUrl, type MaterialKindId } from "@/lib/materials";
+import { detectKind, kindMeta, reusableMaterials, safeUrl, sharedFileCounts, type MaterialKindId } from "@/lib/materials";
 import { formatBytes, removeStoredFile } from "@/lib/db/storage";
 import { AddMaterialRow } from "@/components/subjects/add-material-row";
 import { cn } from "@/lib/utils";
@@ -33,7 +33,14 @@ const KIND_ICONS = {
 } as const;
 
 /** One file or link, with rename / copy / open / delete. */
-export function MaterialRow({ material }: { material: Material }) {
+export function MaterialRow({
+  material,
+  /** True when another row still points at the same file, so it must survive. */
+  fileShared,
+}: {
+  material: Material;
+  fileShared?: boolean;
+}) {
   const { tr } = useI18n();
   const toast = useToast();
   const { update, remove } = useMutate("Material");
@@ -52,7 +59,11 @@ export function MaterialRow({ material }: { material: Material }) {
       await remove(material.id);
       // The row is gone, so a failed cleanup only leaves an orphan file.
       // Doing it in this order never leaves a row pointing at a missing file.
-      if (material.file_path) await removeStoredFile(material.file_path).catch(() => {});
+      // A copy made for another subject points here too, so the file has to
+      // stay put or that copy would be left holding a dead link.
+      if (material.file_path && !fileShared) {
+        await removeStoredFile(material.file_path).catch(() => {});
+      }
       toast({ title: tr("اتحذفت المادة", "Material deleted") });
     } catch (e) {
       toast({
@@ -166,6 +177,8 @@ export function SubjectMaterialsDialog({
   onOpenChange,
   name,
   materials,
+  allMaterials,
+  onReuse,
   onAdd,
   onAddLink,
 }: {
@@ -173,12 +186,25 @@ export function SubjectMaterialsDialog({
   onOpenChange: (v: boolean) => void;
   name: string;
   materials: Material[];
+  /** Every material in the account, so one can be reused from another subject. */
+  allMaterials: Material[];
+  onReuse: (m: Material) => void;
   onAdd: (f: { path: string; url: string; title: string; size: number }) => void;
   onAddLink: (url: string) => void;
 }) {
   const { tr } = useI18n();
   const [url, setUrl] = useState("");
   const [error, setError] = useState("");
+
+  /**
+   * Anything the account already holds that is not in this list yet. A reuse
+   * makes a second row share the file, so the delete below checks the counts.
+   */
+  const available = useMemo(
+    () => reusableMaterials(allMaterials, name, materials),
+    [allMaterials, materials, name],
+  );
+  const sharedFiles = useMemo(() => sharedFileCounts(allMaterials), [allMaterials]);
 
   function submitLink() {
     const clean = safeUrl(url);
@@ -218,12 +244,24 @@ export function SubjectMaterialsDialog({
             ) : (
               <ul className="divide-y">
                 {materials.map((m) => (
-                  <MaterialRow key={m.id} material={m} />
+                  <MaterialRow
+                    key={m.id}
+                    material={m}
+                    fileShared={
+                      !!m.file_path && (sharedFiles.get(m.file_path) ?? 0) > 1
+                    }
+                  />
                 ))}
               </ul>
             )}
 
-            <AddMaterialRow subjectKey={name} onAdd={onAdd} onAddLink={onAddLink} />
+            <AddMaterialRow
+              subjectKey={name}
+              available={available}
+              onReuse={onReuse}
+              onAdd={onAdd}
+              onAddLink={onAddLink}
+            />
 
             {/* phones have no drag and drop, so the link goes in by hand */}
             <form

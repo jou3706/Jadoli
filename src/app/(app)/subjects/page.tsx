@@ -23,10 +23,13 @@ function SubjectCard({
   name,
   sessions,
   materials,
+  allMaterials,
 }: {
   name: string;
   sessions: Lecture[];
   materials: Material[];
+  /** Every material in the account, so any of them can be reused here. */
+  allMaterials: Material[];
 }) {
   const { tr, lang } = useI18n();
   const { editMode, openForm } = useScheduleContext();
@@ -102,6 +105,31 @@ function SubjectCard({
       }),
     );
     toast({ title: tr("اتضافت المادة", "Material added") });
+  }
+
+  /**
+   * Copies a material the account already holds into this subject. The original
+   * keeps its own row, so both subjects share the file without owning it — which
+   * is why deleting one must not remove the file.
+   */
+  function reuseMaterial(m: Material) {
+    ensureRow();
+    void createMaterial({
+      title: m.title,
+      subject_key: name,
+      url: m.url,
+      type: m.type,
+      file_path: m.file_path,
+      size: m.size,
+    })
+      .then(() => toast({ title: tr("اتضافت المادة", "Material added") }))
+      .catch((e: Error) =>
+        toast({
+          title: tr("فشل حفظ المادة", "Could not save"),
+          description: e.message,
+          variant: "destructive",
+        }),
+      );
   }
 
   return (
@@ -254,6 +282,8 @@ function SubjectCard({
         onOpenChange={setMaterialsOpen}
         name={name}
         materials={materials}
+        allMaterials={allMaterials}
+        onReuse={reuseMaterial}
         onAdd={addFile}
         onAddLink={addLink}
       />
@@ -330,13 +360,14 @@ export default function SubjectsPage() {
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {names.map((name) => (
-          <SubjectCard
-            key={name}
-            name={name}
-            sessions={groups.find((g) => g[0]?.subject_name === name) ?? []}
-            materials={bySubject.get(name) ?? []}
-          />
-        ))}
+      <SubjectCard
+        key={name}
+        name={name}
+        sessions={groups.find((g) => g[0]?.subject_name === name) ?? []}
+        materials={bySubject.get(name) ?? []}
+        allMaterials={materials}
+      />
+    ))}
       </div>
     </div>
   );

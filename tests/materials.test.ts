@@ -5,7 +5,9 @@ import {
   detectKind,
   groupMaterials,
   kindMeta,
+  reusableMaterials,
   safeUrl,
+  sharedFileCounts,
 } from "../src/lib/materials.ts";
 
 test("guesses the kind from the extension", () => {
@@ -86,4 +88,83 @@ test("groups by course, largest first, untitled last resort", () => {
 
 test("grouping an empty list yields nothing", () => {
   assert.deepEqual(groupMaterials([]), []);
+});
+
+/* ── reusing a material that is already in the account ─────────── */
+
+const mat = (title: string, subject_key: string, file_path = "") => ({
+  title,
+  subject_key,
+  file_path,
+});
+
+test("a material from another subject can be reused", () => {
+  const all = [mat("OS slides", "Math"), mat("OS notes", "OS")];
+  const free = reusableMaterials(all, "Physics", []);
+  assert.deepEqual(
+    free.map((m) => m.title),
+    ["OS slides", "OS notes"],
+  );
+});
+
+test("a subject's own materials are not offered back to it", () => {
+  const all = [mat("OS slides", "OS"), mat("Math notes", "Math")];
+  const free = reusableMaterials(all, "OS", []);
+  assert.deepEqual(
+    free.map((m) => m.title),
+    ["Math notes"],
+  );
+});
+
+test("an already listed title is not offered again", () => {
+  const all = [mat("OS slides", "Math"), mat("OS notes", "Math")];
+  const free = reusableMaterials(all, "Physics", [mat("OS slides", "Physics")]);
+  assert.deepEqual(
+    free.map((m) => m.title),
+    ["OS notes"],
+    "a duplicate name on screen reads as a mistake",
+  );
+});
+
+test("the title check ignores case", () => {
+  const all = [mat("OS Slides", "Math")];
+  assert.deepEqual(reusableMaterials(all, "Physics", [mat("os slides", "Physics")]), []);
+});
+
+test("a subject with nothing to reuse offers nothing", () => {
+  assert.deepEqual(reusableMaterials([mat("OS", "OS")], "OS", []), []);
+});
+
+/* ── keeping a file that another row still needs ───────────────── */
+
+test("a file used by one row alone is not shared", () => {
+  const counts = sharedFileCounts([mat("OS slides", "OS", "uid/files/a.pdf")]);
+  assert.equal(counts.get("uid/files/a.pdf"), 1);
+});
+
+test("a copied material makes the file shared", () => {
+  // One upload reused into a second subject: two rows, one file. Deleting
+  // either one must leave the file in place or the other loses its link.
+  const counts = sharedFileCounts([
+    mat("OS slides", "OS", "uid/files/a.pdf"),
+    mat("OS slides", "Physics", "uid/files/a.pdf"),
+  ]);
+  assert.equal(counts.get("uid/files/a.pdf"), 2);
+});
+
+test("different files are counted apart", () => {
+  const counts = sharedFileCounts([
+    mat("a", "OS", "uid/files/a.pdf"),
+    mat("b", "OS", "uid/files/b.pdf"),
+    mat("c", "OS", "uid/files/a.pdf"),
+  ]);
+  assert.equal(counts.get("uid/files/a.pdf"), 2);
+  assert.equal(counts.get("uid/files/b.pdf"), 1);
+});
+
+test("a link has no file, so it is never counted as shared", () => {
+  // Deleting a link row removes nothing from storage, so the guard must not
+  // think there is a file to protect.
+  const counts = sharedFileCounts([mat("link", "OS", ""), mat("link", "Math", "")]);
+  assert.equal(counts.size, 0);
 });

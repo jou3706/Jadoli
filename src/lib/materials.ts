@@ -74,3 +74,32 @@ export function groupMaterials<T extends { subject_key: string }>(rows: T[]) {
     (a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]),
   );
 }
+
+/**
+ * Materials the account already holds that this subject does not list yet, so
+ * one can be reused instead of uploading the same file twice. Already-listed
+ * titles are excluded because a duplicate name reads as a mistake on screen.
+ */
+export function reusableMaterials<T extends { title: string; subject_key: string }>(
+  all: T[],
+  subject: string,
+  listed: T[],
+): T[] {
+  const seen = new Set(listed.map((m) => m.title.toLowerCase()));
+  return all.filter(
+    (m) => (m.subject_key ?? "").trim() !== subject && !seen.has(m.title.toLowerCase()),
+  );
+}
+
+/**
+ * How many rows point at each stored file. A material copied into another
+ * subject shares the file, so deleting one of the two must not remove it and
+ * leave the survivor holding a dead link.
+ */
+export function sharedFileCounts<T extends { file_path: string }>(all: T[]) {
+  const counts = new Map<string, number>();
+  for (const m of all) {
+    if (m.file_path) counts.set(m.file_path, (counts.get(m.file_path) ?? 0) + 1);
+  }
+  return counts;
+}
