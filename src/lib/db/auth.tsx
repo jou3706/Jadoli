@@ -11,6 +11,7 @@ import {
 } from "react";
 import { DB_NAME, getBackend } from "./store";
 import { getSupabase } from "./supabase-client";
+import { classifyAuthEvent, classifySession } from "./session";
 
 export type Session = {
   email: string;
@@ -86,13 +87,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (mode !== "supabase") return;
     const sb = getSupabase();
-    if (!sb) return;
+    if (!sb) {
+      setLoading(false);
+      return;
+    }
     let alive = true;
-    const apply = (user: {
-      id: string;
-      email?: string | null;
-      user_metadata?: Record<string, unknown>;
-    } | null) => {
+
+    const apply = (
+      user: {
+        id: string;
+        email?: string | null;
+        user_metadata?: Record<string, unknown>;
+      } | null,
+    ) => {
       if (!alive) return;
       const b = getBackend();
       if (!user) {
@@ -114,15 +121,62 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
       });
     };
-    void sb.auth
-      .getUser()
-      .then(({ data }) => apply(data.user))
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
-    const { data: sub } = sb.auth.onAuthStateChange((_e, s) =>
-      apply(s?.user ?? null),
-    );
+
+    /**
+     * Restores from what is stored, not from the network.
+     *
+     * `getUser` without an argument asks Supabase who the user is, so a slow
+     * or unreachable network answered "nobody" and the app sent a signed-in
+     * person back to the login page - on every reload, and worse with no
+     * signal at all. `getSession` reads the token the browser already has and
+     * costs no request, which is the same reason the rest of the app uses it.
+     * A genuinely expired session is still caught: the token check below
+     * compares against the expiry Supabase stored alongside it.
+     */
+    const restore = async () => {
+      // `getSession` reads the token the browser already holds and costs no
+      // request. `getUser` asks the server who the user is, so treating its
+      // failure as "signed out" logged people out on any slow or missing
+      // network - the token was in storage the whole time.
+      const { data, error } = await sb.auth.getSession();
+      if (!alive) return;
+      const state = classifySession(data.session, Date.now());
+
+      if (state === "valid") {
+        apply(data.session?.user ?? null);
+        return;
+      }
+      if (state === "signed-out" && !data.session) {
+        // Nothing in storage. A missing session with an error is a real
+        // signed-out state; without one it is simply nobody signed in yet.
+        apply(null);
+        return;
+      }
+
+      // A session that needs verifying. Ask the server once, and if that call
+      // cannot be made, keep the user signed in on what is stored - the
+      // offline layer serves their cached data without the server anyway.
+      try {
+        const { data: verified } = await sb.auth.getUser();
+        if (!alive) return;
+        apply(verified.user ?? null);
+      } catch {
+        if (!alive) return;
+        const { data: stored } = await sb.auth.getSession();
+        if (!alive) return;
+        apply(stored.session?.user ?? null);
+        if (!error) return;
+      }
+    };
+
+    void restore().finally(() => {
+      if (alive) setLoading(false);
+    });
+
+    const { data: sub } = sb.auth.onAuthStateChange((event, s) => {
+      if (classifyAuthEvent(event, s) === "ignore") return;
+      apply(s?.user ?? null);
+    });
     return () => {
       alive = false;
       sub.subscription.unsubscribe();
