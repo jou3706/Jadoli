@@ -48,6 +48,81 @@ export function classifySession(s: StoredSession, now: number): SessionState {
   return s.expires_at * 1000 - REFRESH_MARGIN_MS > now ? "valid" : "stale";
 }
 
+export type SessionStorage = {
+  getItem(key: string): string | null;
+};
+
+/** Matches the `storageKey` the client is built with in supabase-client.ts. */
+export const SUPABASE_SESSION_KEY = "jadoli_sb_session";
+
+/**
+ * The session as it sits in storage, read directly.
+ *
+ * This exists because `getSession()` cannot answer the only question that
+ * matters offline. When the access token has expired and the refresh cannot
+ * reach the server, the client keeps the session in storage but reports
+ * `session: null` - it will not hand back a token it knows is stale. The user is
+ * still signed in; the client simply refuses to say so. Reading storage is how
+ * the app can tell the difference between that and a real sign-out, where
+ * storage is empty because the user asked to leave.
+ *
+ * Handles the split-storage shape too, where the user sits under its own key.
+ */
+export function readStoredSession(
+  storage: SessionStorage,
+  key: string = SUPABASE_SESSION_KEY,
+): StoredSession {
+  const read = (k: string) => {
+    try {
+      return storage.getItem(k);
+    } catch {
+      // Private-mode Safari and similar refuse to read storage at all.
+      return null;
+    }
+  };
+  const parse = (raw: string | null) => {
+    if (!raw) return null;
+    try {
+      const value: unknown = JSON.parse(raw);
+      if (!value || typeof value !== "object") return null;
+      const record = value as Record<string, unknown>;
+      const session = (record.session ?? record) as Record<string, unknown>;
+      if (!session || typeof session !== "object") return null;
+      const user =
+        (session.user as StoredSession extends null ? never : NonNullable<StoredSession>["user"]) ??
+        (record.user as NonNullable<StoredSession>["user"]) ??
+        null;
+      return { ...session, user } as NonNullable<StoredSession>;
+    } catch {
+      return null;
+    }
+  };
+  const main = parse(read(key));
+  if (!main) return null;
+  if (!main.user) {
+    const separate = parse(read(`${key}-user`));
+    if (separate?.user) return { ...main, user: separate.user };
+  }
+  return main;
+}
+
+/**
+ * Whether an event without a session means the user actually left.
+ *
+ * The client emits `SIGNED_OUT` when a token refresh fails, and a refresh fails
+ * for reasons that have nothing to do with the user - most often no network at
+ * all. Storage settles it: a real sign-out empties it, because that is what
+ * `signOut()` does, while a failed refresh leaves the session sitting there.
+ * Believing the event is what put people on the login page with no signal.
+ */
+export function classifySignOut(
+  event: AuthEvent,
+  session: StoredSession,
+): "sign-out" | "keep" {
+  if (event !== "SIGNED_OUT") return session ? "keep" : "sign-out";
+  return session ? "keep" : "sign-out";
+}
+
 export type AuthEvent =
   | "INITIAL_SESSION"
   | "SIGNED_IN"

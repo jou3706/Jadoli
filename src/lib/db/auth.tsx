@@ -11,7 +11,12 @@ import {
 } from "react";
 import { DB_NAME, getBackend } from "./store";
 import { getSupabase } from "./supabase-client";
-import { classifyAuthEvent, classifySession } from "./session";
+import {
+  classifyAuthEvent,
+  classifySignOut,
+  readStoredSession,
+  type SessionStorage,
+} from "./session";
 
 export type Session = {
   email: string;
@@ -68,6 +73,12 @@ function readJson<T>(key: string, fallback: T): T {
   }
 }
 
+/** The browser's storage, or a stand-in when there is none to read. */
+function getStorage(): SessionStorage {
+  if (typeof window === "undefined") return { getItem: () => null };
+  return window.localStorage;
+}
+
 function writeJson(key: string, value: unknown) {
   if (typeof window === "undefined") return;
   try {
@@ -108,17 +119,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(null);
         return;
       }
-      void sb.auth.getSession().then(({ data }) => {
-        if (!alive) return;
-        b.attachSession?.(data.session?.access_token ?? null);
-        b.attachUser?.(user.id);
-        setSession({
-          id: user.id,
-          email: user.email ?? "",
-          fullName:
-            (user.user_metadata?.full_name as string | undefined) ??
-            (user.email ?? "").split("@")[0],
-        });
+      // The user is signed in, so sign them in. This used to wait on
+      // `getSession()` for a token first, which meant that a session the
+      // client was refusing to hand over - an expired token with no network -
+      // left the app showing the login page even though the user was standing
+      // right there in storage. The token is attached to the backend so
+      // server calls can use it, but the person is signed in either way: the
+      // offline layer serves their cached data without a valid token.
+      const token = readStoredSession(getStorage())?.access_token ?? null;
+      b.attachSession?.(token);
+      b.attachUser?.(user.id);
+      setSession({
+        id: user.id,
+        email: user.email ?? "",
+        fullName:
+          (user.user_metadata?.full_name as string | undefined) ??
+          (user.email ?? "").split("@")[0],
       });
     };
 
@@ -134,38 +150,48 @@ export function AuthProvider({ children }: { children: ReactNode }) {
      * compares against the expiry Supabase stored alongside it.
      */
     const restore = async () => {
-      // `getSession` reads the token the browser already holds and costs no
-      // request. `getUser` asks the server who the user is, so treating its
-      // failure as "signed out" logged people out on any slow or missing
-      // network - the token was in storage the whole time.
-      const { data, error } = await sb.auth.getSession();
-      if (!alive) return;
-      const state = classifySession(data.session, Date.now());
-
-      if (state === "valid") {
-        apply(data.session?.user ?? null);
+      // Storage first, and unconditionally. `getSession()` returns
+      // `session: null` once the access token has expired and the refresh
+      // cannot reach the server, so reading that as "signed out" is what put
+      // people on the login page with no network. The session is still in
+      // storage; the client just will not hand back a token it knows is stale.
+      const stored = readStoredSession(getStorage());
+      if (stored) {
+        apply(stored.user ?? null);
+        // The token may well be expired, which is fine for cached data but not
+        // for anything the server has to check. Ask once, in the background:
+        // it can renew the token if the network is there, and its failure is
+        // not a reason to sign anyone out.
+        void sb.auth
+          .getSession()
+          .then(({ data, error }) => {
+            if (!alive || error || !data.session) return;
+            apply(data.session.user ?? null);
+          })
+          .catch(() => {});
         return;
       }
-      if (state === "signed-out" && !data.session) {
-        // Nothing in storage. A missing session with an error is a real
-        // signed-out state; without one it is simply nobody signed in yet.
+
+      // Nothing in storage: either a real sign-out, or a first visit.
+      const { data, error } = await sb.auth.getSession();
+      if (!alive) return;
+      if (data.session) {
+        apply(data.session.user ?? null);
+        return;
+      }
+      // A session that failed to materialise is still a sign-in attempt that
+      // did not finish, not a decision to sign out. Confirm with the server
+      // before throwing the user out of the app.
+      if (!error) {
         apply(null);
         return;
       }
-
-      // A session that needs verifying. Ask the server once, and if that call
-      // cannot be made, keep the user signed in on what is stored - the
-      // offline layer serves their cached data without the server anyway.
       try {
         const { data: verified } = await sb.auth.getUser();
         if (!alive) return;
         apply(verified.user ?? null);
       } catch {
-        if (!alive) return;
-        const { data: stored } = await sb.auth.getSession();
-        if (!alive) return;
-        apply(stored.session?.user ?? null);
-        if (!error) return;
+        if (alive) apply(null);
       }
     };
 
@@ -175,7 +201,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const { data: sub } = sb.auth.onAuthStateChange((event, s) => {
       if (classifyAuthEvent(event, s) === "ignore") return;
-      apply(s?.user ?? null);
+      if (s) {
+        apply(s.user);
+        return;
+      }
+      // No session on the event. Storage decides whether that was the user
+      // leaving or a refresh that could not reach the server.
+      if (classifySignOut(event, readStoredSession(getStorage())) === "sign-out") {
+        apply(null);
+      }
     });
     return () => {
       alive = false;
@@ -285,7 +319,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(async () => {
     if (mode === "supabase") {
-      await getSupabase()?.auth.signOut();
+      // Leave the app even if the server cannot be told, and especially when it
+      // cannot be reached. `signOut()` clears storage and fires the event on its
+      // own, but only once the request settles one way or the other - which is
+      // never, with no signal. Waiting on it is what made signing out look like
+      // it did nothing. The local state is the part that has to be immediate.
+      const sb = getSupabase();
+      const backend = getBackend();
+      backend.attachSession?.(null);
+      backend.attachUser?.(null);
+      setSession(null);
+      await sb?.auth.signOut();
       return;
     }
     writeJson(SESSION_KEY, null);

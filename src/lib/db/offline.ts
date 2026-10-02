@@ -66,6 +66,40 @@ export class OfflineError extends Error {
 }
 
 /**
+ * Thrown when the server rejected the token.
+ *
+ * The user is still signed in - the token is the thing that has gone stale, and
+ * a refresh fixes it the moment there is a network. Offline there is no refresh
+ * to be had, so this is treated as "not right now" rather than as a reason to
+ * show an error over data the user is entitled to see. The rows in the snapshot
+ * are namespaced by account, so falling back to them cannot show anybody
+ * else's data.
+ */
+export class AuthExpiredError extends Error {
+  readonly status = 401;
+  constructor(message: string, options?: { cause?: unknown }) {
+    super(message, options);
+    this.name = "AuthExpiredError";
+  }
+}
+
+/**
+ * Whether a request failed for a reason that a later attempt could fix.
+ *
+ * A dead network and a rejected token are both "not now": the first until the
+ * signal comes back, the second until the token refreshes. A genuine refusal -
+ * a duplicate, a broken policy, a bad column - is neither, and repeating it
+ * would fail forever, so it is raised to the caller instead of being parked.
+ */
+export function isRetryableLater(err: unknown): boolean {
+  return isNetworkError(err) || isAuthExpired(err);
+}
+
+export function isAuthExpired(err: unknown): boolean {
+  return err instanceof AuthExpiredError;
+}
+
+/**
  * A write is only worth queueing when the network is what stopped it. A 4xx
  * means the server refused the row - a duplicate, a broken RLS policy, a bad
  * column - and repeating it on every reconnect would fail forever, so those are

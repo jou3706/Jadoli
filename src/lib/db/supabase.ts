@@ -5,6 +5,8 @@ import {
   coalesce,
   emptySnapshot,
   isNetworkError,
+  isRetryableLater,
+  AuthExpiredError,
   OfflineError,
   selectFromSnapshot,
   snapshotHas,
@@ -160,9 +162,15 @@ export class SupabaseBackend implements Backend {
         { cause: err },
       );
     }
-    if (!res.ok) {
+      if (!res.ok) {
       const text = await res.text().catch(() => "");
-      throw new Error(`Supabase ${res.status}: ${text.slice(0, 200)}`);
+      const message = `Supabase ${res.status}: ${text.slice(0, 200)}`;
+      // A rejected token is not a refusal of the row. It is a token that has
+      // gone stale, which a refresh fixes as soon as there is a network, so it
+      // is carried as its own kind of "not now" rather than as an error the app
+      // would have to show over the user's own cached data.
+      if (res.status === 401) throw new AuthExpiredError(message);
+      throw new Error(message);
     }
     if (res.status === 204) return undefined as T;
     return (await res.json()) as T;
@@ -382,8 +390,10 @@ export class SupabaseBackend implements Backend {
         this.outbox = this.outbox.filter((o) => o.id !== op.id);
         await this.saveOutbox();
       } catch (err) {
-        // Still no network: leave the whole queue alone and try later.
-        if (isNetworkError(err)) break;
+        // Still no network, or the token is stale: leave the whole queue alone
+        // and try later. Dropping these would lose the user's work - a queued
+        // write is the only copy until it is accepted.
+        if (isRetryableLater(err)) break;
         // The server refused this one. Keeping it would retry forever, and it
         // is holding up everything queued behind it, so it is dropped and the
         // rest gets its chance.
@@ -454,7 +464,7 @@ export class SupabaseBackend implements Backend {
       this.invalidate();
       return out;
     } catch (err) {
-      if (!isNetworkError(err)) throw err;
+      if (!isRetryableLater(err)) throw err;
       await this.enqueue({ kind, table, payload, where: opts.where });
       return opts.offlineResult;
     }
@@ -486,9 +496,10 @@ export class SupabaseBackend implements Backend {
       // racing cannot write the snapshot out of order.
       await this.mergeSnapshot(name, rows);
     } catch (err) {
-      // Only a dead network falls back. A 4xx is the server answering, and
-      // answering it with cached rows would hide a real problem.
-      if (!isNetworkError(err)) throw err;
+      // A dead network or a stale token falls back. A real refusal is the
+      // server answering about the row itself, and answering that with cached
+      // rows would hide a genuine problem.
+      if (!isRetryableLater(err)) throw err;
       const snap = await this.snapshot();
       if (!snapshotHas(snap, name)) {
         throw new Error(
