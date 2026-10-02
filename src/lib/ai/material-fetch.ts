@@ -64,11 +64,7 @@ export type Loaded = {
   skipped: { id: string; title: string; reason: string }[];
 };
 
-function storageBase(): string {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!url) throw new Error("NO_BACKEND");
-  return `${url.replace(/\/+$/, "")}/storage/v1/object/public/${BUCKET}/`;
-}
+
 
 /**
  * A Supabase client bound to the caller, able only to read their own rows.
@@ -122,9 +118,22 @@ async function ownedPath(
   return { path, title: String(row.title ?? "") };
 }
 
-/** Streams a URL into a base64 data URL, refusing to buffer past the cap. */
+/**
+ * Reads a stored object into a base64 data URL.
+ *
+ * Uses the caller's authenticated storage client rather than an anonymous fetch of
+ * the public URL. That is deliberate: whether the bucket is public is a property
+ * of the project's storage migration, and an anonymous fetch fails with a bare
+ * `400` when it is not - which reads as an unreadable file rather than as a
+ * missing permission. The authenticated client is authorised by the same storage
+ * policies the upload went through, so it succeeds for the owner either way and
+ * reports a real status when the object genuinely is not there.
+ *
+ * The path has already been proven to be the caller's by `ownedPath`.
+ */
 async function toDataUrl(
-  url: string,
+  sb: Sb,
+  path: string,
   mime: string,
   signal: AbortSignal,
 ): Promise<{ dataUrl: string } | { error: string }> {
@@ -134,36 +143,31 @@ async function toDataUrl(
   signal.addEventListener("abort", onAbort, { once: true });
 
   try {
-    const res = await fetch(url, { signal: ac.signal });
-    if (!res.ok) return { error: `READ_FAILED_${res.status}` };
-
-    // The declared length is a hint and is often missing; the count below is what
-    // actually stops the download.
-    const declared = Number(res.headers.get("content-length") ?? "0");
-    if (declared > MAX_READ_BYTES) return { error: "TOO_BIG" };
-
-    if (!res.body) return { error: "NO_BODY" };
-    const reader = res.body.getReader();
-    const chunks: Uint8Array[] = [];
-    let total = 0;
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > MAX_READ_BYTES) {
-        await reader.cancel().catch(() => {});
-        return { error: "TOO_BIG" };
-      }
-      chunks.push(value);
+    // The signal rides in the fetch parameters, not the download options.
+    const { data, error } = await sb.storage
+      .from(BUCKET)
+      .download(path, {}, { signal: ac.signal });
+    if (error) {
+      // A missing object and a refused one are different problems, and the
+      // student is the one who has to tell them apart.
+      const status = (error as { statusCode?: number }).statusCode ?? 0;
+      const name = error.message ?? "";
+      if (status === 404 || /not found/i.test(name)) return { error: "MISSING" };
+      if (status === 401 || status === 403) return { error: "NOT_YOURS" };
+      return { error: "READ_FAILED" };
     }
-    if (!total) return { error: "EMPTY_FILE" };
 
-    const bytes = new Uint8Array(total);
-    let at = 0;
-    for (const c of chunks) {
-      bytes.set(c, at);
-      at += c.byteLength;
-    }
+    const blob = data as Blob | null;
+    if (!blob) return { error: "NO_BODY" };
+    // `size` is the whole object, so the cap can be enforced before the bytes are
+    // materialised rather than after.
+    if (blob.size > MAX_READ_BYTES) return { error: "TOO_BIG" };
+
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    if (!bytes.byteLength) return { error: "EMPTY_FILE" };
+    // Re-checked against the bytes actually received: a length is only ever a hint.
+    if (bytes.byteLength > MAX_READ_BYTES) return { error: "TOO_BIG" };
+
     let bin = "";
     for (let i = 0; i < bytes.length; i += 0x8000) {
       // Chunked, because spreading a multi-megabyte array into apply() blows the
@@ -213,8 +217,6 @@ export async function loadMaterials(
     };
   }
 
-  const base = storageBase();
-
   for (const ref of refs) {
     const owned = await ownedPath(sb, ref.id, userId);
     if (!owned) {
@@ -226,9 +228,9 @@ export async function loadMaterials(
       skipped.push({ id: ref.id, title: owned.title, reason: "UNSUPPORTED_TYPE" });
       continue;
     }
-    // Built from our own host and a path already proven to be the caller's, so
-    // this cannot fetch an arbitrary address.
-    const out = await toDataUrl(base + encodeStoragePath(owned.path), mime, signal);
+    // Read through the caller's own storage client, so a path already proven to
+    // be theirs is the only thing that names a file.
+    const out = await toDataUrl(sb, owned.path, mime, signal);
     if ("error" in out) {
       skipped.push({ id: ref.id, title: owned.title, reason: out.error });
       continue;
@@ -244,13 +246,14 @@ export function skipReason(reason: string, lang: "ar" | "en"): string {
   const table: Record<string, [string, string]> = {
     NO_SESSION: ["لازم تسجل دخول تاني", "sign in again"],
     NO_BACKEND: ["مش متوصل بالداتابيز", "not connected to the database"],
-    NOT_YOURS: ["الملف مش موجود", "that file is not there"],
+    NOT_YOURS: ["الملف مش بتاعك", "that file is not yours"],
+    MISSING: ["الملف مش موجود في التخزين", "that file is not in storage"],
     UNSUPPORTED_TYPE: ["صيغة مش مدعومة", "that format is not supported"],
     TOO_BIG: ["الملف كبير على القراءة", "that file is too big to read"],
     EMPTY_FILE: ["الملف فاضي", "that file is empty"],
     TIMEOUT: ["القراءة اتأخرت", "that file took too long to read"],
+    NO_BODY: ["مفيش محتوى في الملف", "that file came back empty"],
     READ_FAILED: ["مش قادرين نقرأ الملف", "could not read that file"],
-    READ_FAILED_404: ["الملف مش موجود", "that file is not there"],
   };
   const found = table[reason] ?? table.READ_FAILED;
   return lang === "en" ? found[1] : found[0];
