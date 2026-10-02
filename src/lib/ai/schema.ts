@@ -46,6 +46,29 @@ export const importBodySchema = z.object({
  */
 export const MAX_NOTE_CHARS = 12_000;
 
+/**
+ * One file to read, named so the model can be told which question came from
+ * which page.
+ *
+ * `dataUrl` rather than a URL: a URL handed to a model is not fetched, it is
+ * quoted back at the student as a question about nothing. The browser reads the
+ * material it already has access to and sends the bytes.
+ */
+export const materialPart = z.object({
+  title: z.string().max(200).default(""),
+  dataUrl: z
+    .string()
+    .regex(
+      /^data:(image\/(png|jpeg|jpg|webp)|application\/pdf);base64,[A-Za-z0-9+/=]+$/,
+      { message: "attachment must be a base64 data URL" },
+    )
+    .max(30_000_000),
+  mime: z.string().max(60),
+});
+
+/** Mirrors `MAX_CARDABLE_MATERIALS` in `lib/material-cards`. */
+export const MAX_MATERIAL_PARTS = 6;
+
 export const flashcardsBodySchema = z
   .object({
     model: z.string().min(1).max(60).default("gemini-35-flash"),
@@ -53,12 +76,13 @@ export const flashcardsBodySchema = z
     subject: z.string().max(120).default(""),
     /** Notes typed or pasted by the student. */
     text: z.string().max(MAX_NOTE_CHARS).default(""),
-    images: z.array(image).max(6).default([]),
+    /** Files already saved as materials on the course. */
+    materials: z.array(materialPart).max(MAX_MATERIAL_PARTS).default([]),
     /** How many cards to ask for. A hint, not a promise. */
     count: z.number().int().min(3).max(40).default(10),
     language: z.enum(["ar", "en"]).default("ar"),
   })
-  .refine((v) => v.text.trim().length > 0 || v.images.length > 0, {
+  .refine((v) => v.text.trim().length > 0 || v.materials.length > 0, {
     message: "there is nothing to make cards from",
     path: ["text"],
   });
