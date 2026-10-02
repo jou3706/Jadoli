@@ -25,6 +25,11 @@ create table if not exists public.subject_events (
     check (end_time = '' or end_time ~ '^[0-2][0-9]:[0-5][0-9]$'),
   hall text not null default '',
   note text not null default '',
+  -- How far ahead of the start this event should be announced. 60 minutes is
+  -- the default because that is the point where "you have an hour to revise"
+  -- is still true and useful; 0 means at the moment it starts.
+  remind_minutes integer not null default 60
+    check (remind_minutes between 0 and 10080),
   created_date timestamptz not null default now(),
   updated_date timestamptz not null default now()
 );

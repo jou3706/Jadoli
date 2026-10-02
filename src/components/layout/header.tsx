@@ -7,6 +7,7 @@ import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/db/auth";
 import { useList, useOffline } from "@/lib/db/store";
 import { useNotifications } from "@/hooks/use-notifications";
+import { AlarmSoundToggle } from "@/components/subjects/event-alarm";
 import { useScheduleContext } from "@/lib/schedule-context";
 import { nowCairo } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -178,6 +179,13 @@ export function Header({
               <Bell className="h-4 w-4" />
             )}
           </Button>
+
+          {/*
+            Next to the notification bell, and not inside it: a notification and
+            a sound are two different permissions, and a browser will happily
+            allow the first while refusing the second until it has been asked.
+          */}
+          <AlarmSoundToggle />
 
           <div className="hidden items-center gap-1 lg:flex">
             <ThemeToggle variant="ghost" />

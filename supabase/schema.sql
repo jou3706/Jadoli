@@ -116,6 +116,8 @@ create table if not exists public.subject_events (
                   check (end_time = '' or end_time ~ '^[0-2][0-9]:[0-5][0-9]$'),
   hall          text not null default '',
   note          text not null default '',
+  remind_minutes integer not null default 60
+                  check (remind_minutes between 0 and 10080),
   created_date  timestamptz not null default now(),
   updated_date  timestamptz not null default now()
 );

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CalendarPlus, Trash2 } from "lucide-react";
+import { CalendarPlus, Trash2, AlarmClock } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { useList, useMutate } from "@/lib/db/store";
 import { useToast } from "@/components/ui/toast";
@@ -25,6 +25,7 @@ import {
   splitByToday,
   todayISO,
 } from "@/lib/subject-events";
+import { DEFAULT_REMIND_MINUTES, remindChoices } from "@/lib/alarm";
 import type { SubjectEvent, SubjectEventKind } from "@/lib/db/types";
 
 /**
@@ -44,6 +45,7 @@ const RESTORABLE: (keyof SubjectEvent)[] = [
   "end_time",
   "hall",
   "note",
+  "remind_minutes",
 ];
 
 const toPayload = (e: SubjectEvent) =>
@@ -55,10 +57,12 @@ function EventRow({
   event,
   today,
   onDelete,
+  onRemind,
 }: {
   event: SubjectEvent;
   today: string;
   onDelete: () => void;
+  onRemind: (minutes: number) => void;
 }) {
   const { tr, lang } = useI18n();
   const past = event.date < today;
@@ -85,7 +89,7 @@ function EventRow({
             {shortDate(event.date, lang)} · {countdownLabel(event.date, today, lang)}
           </span>
         </div>
-        <div className="mt-1 flex flex-wrap items-center gap-x-3 text-xs text-muted-foreground">
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
           {event.start_time && (
             <span className="tabular-nums">
               {formatTime(event.start_time)}
@@ -93,6 +97,19 @@ function EventRow({
             </span>
           )}
           {event.hall && <span>{event.hall}</span>}
+          <AlarmClock className="h-3 w-3" />
+          <Select
+            value={String(event.remind_minutes)}
+            onChange={(e) => onRemind(Number(e.target.value))}
+            className="h-7 w-auto py-0 text-xs"
+            aria-label={tr("ينبهني قبل", "Remind me before")}
+          >
+            {remindChoices(event.remind_minutes).map((c) => (
+              <option key={c.min} value={c.min}>
+                {lang === "en" ? c.en : c.ar}
+              </option>
+            ))}
+          </Select>
         </div>
         {event.note && <p className="mt-1 text-xs">{event.note}</p>}
       </div>
@@ -122,7 +139,7 @@ export function SubjectEventsDialog({
   const toast = useToast();
   const today = todayISO(new Date());
   const { data: all = [] } = useList("SubjectEvent", "date", 500);
-  const { create, remove } = useMutate("SubjectEvent");
+  const { create, remove, update } = useMutate("SubjectEvent");
 
   const [title, setTitle] = useState("");
   const [kind, setKind] = useState<SubjectEventKind>("quiz");
@@ -131,6 +148,7 @@ export function SubjectEventsDialog({
   const [end, setEnd] = useState("");
   const [hall, setHall] = useState("");
   const [note, setNote] = useState("");
+  const [remind, setRemind] = useState(String(DEFAULT_REMIND_MINUTES));
   const [saving, setSaving] = useState(false);
 
   const events = useMemo(() => eventsForSubject(all, subject), [all, subject]);
@@ -144,6 +162,20 @@ export function SubjectEventsDialog({
     setEnd("");
     setHall("");
     setNote("");
+    setRemind(String(DEFAULT_REMIND_MINUTES));
+  };
+
+  /** A changed reminder is an edit to the event, not a separate setting. */
+  const setRemindFor = async (event: SubjectEvent, minutes: number) => {
+    try {
+      await update(event.id, { remind_minutes: minutes });
+    } catch (e) {
+      toast({
+        title: tr("مقدرناش نغيّر وقت التنبيه", "Could not change the reminder"),
+        description: e instanceof Error ? e.message : undefined,
+        variant: "destructive",
+      });
+    }
   };
 
   const save = async () => {
@@ -161,6 +193,7 @@ export function SubjectEventsDialog({
         end_time: end,
         hall: hall.trim(),
         note: note.trim(),
+        remind_minutes: Number(remind),
       });
       reset();
       toast({ title: tr("اتسجل الحدث", "Event added"), description: title.trim() });
@@ -268,6 +301,22 @@ export function SubjectEventsDialog({
             </Field>
           </div>
 
+          <Field
+            label={tr("ينبهني قبل", "Remind me before")}
+            hint={tr(
+              "صوت المنبه بيشتغل طول ما الصفحة مفتوحة",
+              "The alarm rings while the app is open",
+            )}
+          >
+            <Select value={remind} onChange={(e) => setRemind(e.target.value)}>
+              {remindChoices(Number(remind)).map((c) => (
+                <option key={c.min} value={c.min}>
+                  {lang === "en" ? c.en : c.ar}
+                </option>
+              ))}
+            </Select>
+          </Field>
+
           <Field label={tr("القاعة", "Hall")}>
             <Input value={hall} onChange={(e) => setHall(e.target.value)} />
           </Field>
@@ -299,6 +348,7 @@ export function SubjectEventsDialog({
                   event={e}
                   today={today}
                   onDelete={() => void del(e)}
+                  onRemind={(m) => void setRemindFor(e, m)}
                 />
               ))}
             </ul>

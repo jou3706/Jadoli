@@ -73,7 +73,7 @@ export function SubjectEventsPopover({
   events: SubjectEvent[];
   className?: string;
 }) {
-  const { tr, lang } = useI18n();
+  const { tr } = useI18n();
   const today = todayISO(new Date());
   const [open, setOpen] = useState(false);
   const panelId = useId();

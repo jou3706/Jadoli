@@ -79,10 +79,13 @@ const Skeleton = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>)
 
 function Field({
   label,
+  hint,
   children,
   className,
 }: {
   label: React.ReactNode;
+  /** The catch. Said here, where the choice is made, not in a help page. */
+  hint?: React.ReactNode;
   children: React.ReactNode;
   className?: string;
 }) {
@@ -90,6 +93,7 @@ function Field({
     <div className={cn("space-y-1.5", className)}>
       <Label>{label}</Label>
       {children}
+      {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
     </div>
   );
 }

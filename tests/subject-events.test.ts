@@ -24,6 +24,7 @@ const ev = (over: Partial<SubjectEvent> = {}): SubjectEvent => ({
   end_time: "10:45",
   hall: "",
   note: "",
+  remind_minutes: 60,
   created_date: "2026-10-01T00:00:00Z",
   ...over,
 });

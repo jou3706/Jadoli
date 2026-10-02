@@ -90,6 +90,8 @@ export type SubjectEvent = {
   end_time: string;
   hall: string;
   note: string;
+  /** Minutes before the start to announce it. 0 means at the moment it starts. */
+  remind_minutes: number;
   created_date: string;
 };
 
