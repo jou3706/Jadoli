@@ -144,6 +144,62 @@ create table if not exists public.university_events (
   updated_date  timestamptz not null default now()
 );
 
+-- ── Flashcards and review sessions ─────────────────────────────────────────
+-- Generated from a student's own notes, and scheduled by the app into the holes
+-- in the timetable. See 06-flashcards-and-review.sql for the deployed version.
+
+create table if not exists public.flashcards (
+  id             uuid primary key default gen_random_uuid(),
+  user_id        uuid not null references auth.users on delete cascade,
+  subject_key    text not null default '',
+  question       text not null default '',
+  answer         text not null default '',
+  source         text not null default '',
+  source_kind    text not null default 'typed'
+                   check (source_kind in ('typed','notes')),
+  language       text not null default 'ar' check (language in ('ar','en')),
+  -- Spaced repetition, flattened onto the card: the next date is all that is
+  -- needed to ask it again, and a row per past answer would be a history that
+  -- has to be kept right and read by nobody.
+  interval_days  integer not null default 0 check (interval_days between 0 and 365),
+  ease           numeric not null default 2.5 check (ease between 1.3 and 2.8),
+  reps           integer not null default 0 check (reps >= 0),
+  lapses         integer not null default 0 check (lapses >= 0),
+  due_date       date not null default current_date,
+  last_review    date,
+  created_date   timestamptz not null default now()
+);
+
+-- The queue is read by due date for one account, constantly.
+create index if not exists flashcards_user_due_idx
+  on public.flashcards (user_id, due_date);
+
+create index if not exists flashcards_user_subject_idx
+  on public.flashcards (user_id, subject_key);
+
+-- One card is one question about one course: adding the same quiz twice is a
+-- slip, not two facts to learn, and the index also makes the offline retry safe.
+create unique index if not exists flashcards_user_subject_question_key
+  on public.flashcards (user_id, lower(btrim(subject_key)), lower(btrim(question)));
+
+create table if not exists public.review_sessions (
+  id             uuid primary key default gen_random_uuid(),
+  user_id        uuid not null references auth.users on delete cascade,
+  date           date not null,
+  start_time     text not null default '' check (start_time = '' or start_time ~ '^[0-2][0-9]:[0-5][0-9]$'),
+  end_time       text not null default '' check (end_time = '' or end_time ~ '^[0-2][0-9]:[0-5][0-9]$'),
+  subject_key    text not null default '',
+  card_count     integer not null default 0 check (card_count >= 0),
+  source         text not null default 'auto' check (source in ('auto','manual')),
+  done           boolean not null default false,
+  created_date   timestamptz not null default now(),
+  updated_date   timestamptz not null default now()
+);
+
+-- A planner that looked at a week needs to read it by date, not by insertion.
+create index if not exists review_sessions_user_date_idx
+  on public.review_sessions (user_id, date);
+
 create table if not exists public.chats (
   id            uuid primary key default gen_random_uuid(),
   user_id       uuid not null references auth.users on delete cascade,
@@ -177,6 +233,8 @@ alter table public.materials         enable row level security;
 alter table public.subjects          enable row level security;
 alter table public.subject_events    enable row level security;
 alter table public.university_events enable row level security;
+alter table public.flashcards        enable row level security;
+alter table public.review_sessions   enable row level security;
 alter table public.chats             enable row level security;
 alter table public.messages          enable row level security;
 
@@ -186,7 +244,8 @@ declare
 begin
   foreach t in array array[
     'lectures','attendance','grades','halls','materials','subjects',
-    'subject_events','university_events','chats','messages'
+    'subject_events','university_events','flashcards','review_sessions',
+    'chats','messages'
   ]
   loop
     execute format('drop policy if exists %I on public.%I', t || '_own', t);

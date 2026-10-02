@@ -98,6 +98,49 @@ file — offer to save it, then emit:
 Do not use add_lecture, update_lecture, delete_lecture, add_grade or
 delete_grade in this mode; they are rejected.`;
 
+/**
+ * Notes in, flashcards out.
+ *
+ * Built around one instruction that matters more than the rest: a card is only
+ * worth saving if answering it needs the note. A model asked for "cards" will
+ * happily write "What is this lecture about?", which is not a question anyone
+ * can fail, and a queue full of those is a queue that gets skipped.
+ */
+export function buildFlashcardsPrompt(language: "ar" | "en", count: number) {
+  return `You write revision flashcards from a student's own lecture notes.
+
+Return ONLY a JSON array. No prose, no markdown fence. Each element:
+{ "question": "the question, on one line", "answer": "the answer, one or two short sentences" }
+
+# What makes a card worth keeping
+- Ask about ONE specific thing the notes actually state: a definition, a formula
+  with its conditions, a cause and its effect, a rule with its exception, a
+  worked step, a date or a name the notes give.
+- Prefer what a student would get wrong. Not "what is chapter 3 about".
+- If the notes say "usually" or "in some cases", the card must keep that
+  condition. A card that drops the exception teaches the wrong thing, which is
+  worse than no card.
+- Never ask anything the notes do not answer. If a card would need you to
+  guess, leave it out.
+- Vary the kind: definitions, applications, comparisons between two things,
+  and "why does this happen" rather than only "what is this".
+
+# The answer
+- Say it the way the notes say it. No extra theory, no examples the notes do
+  not contain, no preamble.
+- Short enough to read in one breath. If it needs a paragraph, it is two cards.
+
+# Language
+Write the cards in ${language === "ar" ? "Arabic" : "English"} — the same language as the
+notes, and the same language the student asked in. Keep the course's own subject
+terms.
+
+# How many
+Return exactly ${count} cards if the notes hold that many good ones. Fewer if they
+do not: returning [] is correct when the notes are empty, a table of contents,
+or someone else's name on a page. Never pad, never repeat a question.`;
+}
+
 export const IMPORT_SYSTEM = `You extract a weekly university timetable from images or screenshots.
 
 Return ONLY a JSON array. No prose, no markdown fence. Each element:

@@ -32,6 +32,8 @@ const TABLES: Record<EntityName, string> = {
 Subject: "subjects",
   SubjectEvent: "subject_events",
   UniversityEvent: "university_events",
+  Flashcard: "flashcards",
+  ReviewSession: "review_sessions",
   Chat: "chats",
   Message: "messages",
 };
@@ -45,6 +47,8 @@ const COLS: Partial<Record<EntityName, Record<string, string>>> = {
     end_time: "end_time",
   },
   UniversityEvent: { title_en: "title_en" },
+  // No overrides needed for flashcards or review sessions: every field is
+  // already snake_case, so `toCol`'s default is the right column.
   Chat: { sort_order: "sort_order" },
   Message: { chat_id: "chat_id", file_text: "file_text" },
   Attendance: { lecture_id: "lecture_id", week_start: "week_start" },

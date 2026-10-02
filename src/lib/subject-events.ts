@@ -1,3 +1,4 @@
+import { isUniqueViolation } from "./db/errors";
 import type { SubjectEvent, SubjectEventKind } from "./db/types";
 
 /**
@@ -135,7 +136,4 @@ export const eventSubjectName = (subjectKey: string) => subjectKey.trim();
  * "you already added this" arrives as a raw Postgres complaint, and that should
  * not be the sentence a person has to read.
  */
-export const isDuplicateEvent = (err: unknown) =>
-  /duplicate key|23505|already exists|conflict/i.test(
-    err instanceof Error ? err.message : String(err),
-  );
+export const isDuplicateEvent = (err: unknown) => isUniqueViolation(err);

@@ -24,6 +24,7 @@ export default function WeekPage() {
     300,
   );
   const { data: events = [] } = useList("UniversityEvent", "date", 300);
+  const { data: sessions = [] } = useList("ReviewSession", "date", 100);
   const tableRef = useRef<HTMLTableElement>(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [now] = useState(() => nowCairo());
@@ -69,6 +70,7 @@ export default function WeekPage() {
           ref={tableRef}
           lectures={searchLectures(lectures, search)}
           now={now}
+          sessions={sessions.filter((s) => !s.done)}
           editMode={editMode}
           openForm={(arg) =>
             openForm(

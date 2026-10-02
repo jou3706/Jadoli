@@ -1,12 +1,12 @@
 "use client";
 
 import { forwardRef } from "react";
+import { Layers } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { HOURS, TABLE_DAYS, colorStyle, dayName, hourLabel } from "@/lib/constants";
 import { lectureStatus, lectureTitle } from "@/lib/schedule";
-import { cn } from "@/lib/utils";
-import { toMinutes } from "@/lib/utils";
-import type { Lecture } from "@/lib/db/types";
+import { cn, formatTime, toMinutes } from "@/lib/utils";
+import type { Lecture, ReviewSession } from "@/lib/db/types";
 import { SubjectEventsFor } from "@/components/subjects/subject-events-popover";
 
 type Cell = { h: number; span: number; lecture: Lecture | null };
@@ -36,6 +36,72 @@ function layoutDay(lectures: Lecture[], day: number): Cell[] {
   return rows;
 }
 
+/**
+ * A review sitting, drawn on the week.
+ *
+ * A session has a real date and a lecture has a weekday, so the two cannot be
+ * the same kind of thing in the same grid: a lecture repeats every week, a
+ * review sitting happens once. Rather than bend that, each session is drawn on
+ * the date it belongs to and left off the other six days of the week - which is
+ * also the honest picture, because a sitting from last Saturday is not this
+ * Saturday's sitting.
+ */
+export function WeekReviewSessions({ sessions }: { sessions: ReviewSession[] }) {
+  const { tr, lang } = useI18n();
+  if (!sessions.length) return null;
+
+  const byDay = new Map<number, ReviewSession[]>();
+  for (const s of sessions) {
+    const day = new Date(`${s.date}T00:00:00Z`).getUTCDay();
+    const list = byDay.get(day) ?? [];
+    list.push(s);
+    byDay.set(day, list);
+  }
+
+  return (
+    <>
+      {TABLE_DAYS.filter((d) => byDay.has(d)).map((day) => (
+        <tr key={day} className="border-t">
+          <td className="p-1 ps-3 align-top">
+            <span className="text-[11px] text-muted-foreground">
+              {dayName(day, lang)}
+            </span>
+          </td>
+          <td colSpan={HOURS.length} className="p-1">
+            <ul className="flex flex-wrap gap-1.5">
+              {(byDay.get(day) ?? []).map((s) => (
+                <li key={s.id}>
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-full border border-teal-500/40 bg-teal-500/10 px-2 py-0.5 text-[11px] font-medium",
+                      s.done && "opacity-50 line-through",
+                    )}
+                  >
+                    <Layers className="h-3 w-3 text-teal-600 dark:text-teal-300" />
+                    <span className="tabular-nums">
+                      {formatTime(s.start_time)}
+                    </span>
+                    {s.subject_key && (
+                      <span className="max-w-[10rem] truncate">
+                        {s.subject_key}
+                      </span>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </td>
+        </tr>
+      ))}
+      <tr className="sr-only">
+        <td colSpan={HOURS.length + 1}>
+          {tr("جلسات المراجعة", "Review sessions")}
+        </td>
+      </tr>
+    </>
+  );
+}
+
 export const WeekTable = forwardRef<
   HTMLTableElement,
   {
@@ -43,8 +109,10 @@ export const WeekTable = forwardRef<
     now: Date;
     editMode?: boolean;
     openForm?: (l: Lecture | { day: number; start_time: string; end_time: string }) => void;
+    /** Sittings to draw under the days they fall on. */
+    sessions?: ReviewSession[];
   }
->(function WeekTable({ lectures, now, editMode = false, openForm }, ref) {
+>(function WeekTable({ lectures, now, editMode = false, openForm, sessions = [] }, ref) {
   const { tr, lang } = useI18n();
   const today = now.getDay();
 
@@ -147,6 +215,7 @@ export const WeekTable = forwardRef<
               </tr>
             );
           })}
+          <WeekReviewSessions sessions={sessions} />
         </tbody>
       </table>
     </div>

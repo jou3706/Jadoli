@@ -1,7 +1,16 @@
 ﻿"use client";
 
 import { useMemo, useState } from "react";
-import { CalendarClock, Clock, MapPin, Pencil, Plus, Trash2, User } from "lucide-react";
+import {
+  CalendarClock,
+  Clock,
+  Layers,
+  MapPin,
+  Pencil,
+  Plus,
+  Trash2,
+  User,
+} from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { useList, useMutate } from "@/lib/db/store";
 import { useScheduleContext } from "@/lib/schedule-context";
@@ -16,7 +25,9 @@ import { SubjectCoverTile } from "@/components/subjects/subject-cover";
 import { AddMaterialRow } from "@/components/subjects/add-material-row";
 import { SubjectMaterialsDialog } from "@/components/subjects/subject-materials-dialog";
 import { SubjectEventsDialog } from "@/components/subjects/subject-events-dialog";
-import { eventsForSubject } from "@/lib/subject-events";
+import { eventsForSubject, todayISO } from "@/lib/subject-events";
+import { isDue, type SrsCard } from "@/lib/srs";
+import { GenerateCardsDialog } from "@/components/review/generate-cards-dialog";
 import type { Lecture, Material, SubjectEvent } from "@/lib/db/types";
 
 /* ── Subject card ──────────────────────────────────────────── */
@@ -43,12 +54,36 @@ function SubjectCard({
   const { data: allEvents = [] } = useList("SubjectEvent", "date", 500);
   const [materialsOpen, setMaterialsOpen] = useState(false);
   const [eventsOpen, setEventsOpen] = useState(false);
+  const [cardsOpen, setCardsOpen] = useState(false);
 
   // The count on the button, so a course with something due is visible without
   // opening anything. Matched the same way the schedule matches it.
   const eventCount = useMemo(
     () => eventsForSubject(allEvents as SubjectEvent[], name).length,
     [allEvents, name],
+  );
+
+  /**
+   * How much of this course is waiting to be reviewed.
+   *
+   * Counted on the button rather than hidden inside the review page, because the
+   * question a student has while looking at a course is "how much work does this
+   * one still owe me", and the answer should be visible from here.
+   */
+  const { data: allCards = [] } = useList("Flashcard", "-due_date", 500);
+  const cardDue = useMemo(
+    () =>
+      allCards.filter(
+        (c) =>
+          (c.subject_key || "").trim() === name.trim() &&
+          isDue(c as SrsCard, todayISO(new Date())),
+      ).length,
+    [allCards, name],
+  );
+  const cardTotal = useMemo(
+    () =>
+      allCards.filter((c) => (c.subject_key || "").trim() === name.trim()).length,
+    [allCards, name],
   );
 
   const first = sessions[0] ?? materials[0];
@@ -300,6 +335,19 @@ function SubjectCard({
             ? tr(`الأحداث (${eventCount})`, `Events (${eventCount})`)
             : tr("أضف حدث", "Add an event")}
         </button>
+        <span className="h-4 w-px bg-border" />
+        <button
+          type="button"
+          onClick={() => setCardsOpen(true)}
+          className="flex flex-1 items-center justify-center gap-1 py-1.5 text-xs text-muted-foreground hover:text-primary"
+        >
+          <Layers className="h-3 w-3" />
+          {cardDue > 0
+            ? tr(`المراجعة (${cardDue})`, `Review (${cardDue})`)
+            : cardTotal > 0
+              ? tr("الكروت", "Cards")
+              : tr("كروت", "Cards")}
+        </button>
       </div>
 
       <SubjectMaterialsDialog
@@ -317,6 +365,13 @@ function SubjectCard({
         open={eventsOpen}
         onOpenChange={setEventsOpen}
         subject={name}
+      />
+
+      <GenerateCardsDialog
+        open={cardsOpen}
+        onOpenChange={setCardsOpen}
+        subject={name}
+        today={todayISO(new Date())}
       />
     </div>
   );

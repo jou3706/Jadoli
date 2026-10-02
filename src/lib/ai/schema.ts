@@ -36,6 +36,33 @@ export const importBodySchema = z.object({
   images: z.array(image).min(1).max(8),
 });
 
+/**
+ * Enough to make cards from, and no more than a model will read.
+ *
+ * Either typed notes or a file, or both. The text is capped rather than the
+ * images because a wall of pasted text is the failure that costs money without
+ * producing cards, and the honest answer to it is "that is a lot of notes, save
+ * it as a material and make cards from the lecture".
+ */
+export const MAX_NOTE_CHARS = 12_000;
+
+export const flashcardsBodySchema = z
+  .object({
+    model: z.string().min(1).max(60).default("gemini-35-flash"),
+    /** The course these cards belong to. */
+    subject: z.string().max(120).default(""),
+    /** Notes typed or pasted by the student. */
+    text: z.string().max(MAX_NOTE_CHARS).default(""),
+    images: z.array(image).max(6).default([]),
+    /** How many cards to ask for. A hint, not a promise. */
+    count: z.number().int().min(3).max(40).default(10),
+    language: z.enum(["ar", "en"]).default("ar"),
+  })
+  .refine((v) => v.text.trim().length > 0 || v.images.length > 0, {
+    message: "there is nothing to make cards from",
+    path: ["text"],
+  });
+
 /** Strips a leading ```action ...``` block out of a reply. */
 export function splitAction(reply: string): {
   visible: string;

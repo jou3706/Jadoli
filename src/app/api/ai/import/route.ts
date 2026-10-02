@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { importBodySchema } from "@/lib/ai/schema";
+import { extractArray } from "@/lib/ai/extract";
 import { completeJson } from "@/lib/ai/providers";
 import { IMPORT_SYSTEM } from "@/lib/ai/prompts";
 import type { ModelId } from "@/lib/ai/models";
@@ -38,40 +39,6 @@ const normDay = (v: unknown): number | null => {
   if (m && m[1] in DAY_NAMES) return DAY_NAMES[m[1]];
   return null;
 };
-
-/** Pulls the first JSON array out of a model reply. */
-function extractArray(raw: string): unknown[] {
-  const cleaned = raw.replace(/```json\s*/gi, "").replace(/```/g, "").trim();
-  const start = cleaned.indexOf("[");
-  if (start === -1) return [];
-  let depth = 0;
-  let end = -1;
-  let inStr = false;
-  for (let i = start; i < cleaned.length; i++) {
-    const c = cleaned[i];
-    if (inStr) {
-      if (c === "\\") i++;
-      else if (c === '"') inStr = false;
-      continue;
-    }
-    if (c === '"') inStr = true;
-    else if (c === "[") depth++;
-    else if (c === "]") {
-      depth--;
-      if (depth === 0) {
-        end = i + 1;
-        break;
-      }
-    }
-  }
-  if (end === -1) return [];
-  try {
-    const parsed = JSON.parse(cleaned.slice(start, end));
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
 
 export async function POST(req: Request) {
   let body: unknown;

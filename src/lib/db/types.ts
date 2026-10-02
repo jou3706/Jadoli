@@ -104,6 +104,69 @@ export type UniversityEvent = {
   note: string;
 };
 
+/**
+ * One question and its answer, and everything the app remembers about it.
+ *
+ * A card belongs to a course by name, the way `Material.subject_key` and
+ * `SubjectEvent.subject_key` do, so a card can exist for a course that has no
+ * row in `subjects` yet.
+ *
+ * The scheduling fields are one flat row rather than a table of reviews: the
+ * next date is all that is needed to show the card again, and a history of every
+ * past answer is a thing nobody reads and a thing that has to be kept correct.
+ */
+export type Flashcard = {
+  id: Id;
+  subject_key: string;
+  question: string;
+  answer: string;
+  /** Where it came from, so a wrong card can be traced back to its notes. */
+  source: string;
+  /** `typed` for something written by hand, `notes` for an uploaded file. */
+  source_kind: "typed" | "notes";
+  /** Which language the card is written in, so the page can say so. */
+  language: "ar" | "en";
+  /** ── Spaced repetition ─────────────────────────────────────── */
+  /** Days until it is asked again. 0 means again today. */
+  interval_days: number;
+  /** How reliably it is remembered, and how fast the interval may grow. */
+  ease: number;
+  /** How many times it has been remembered. */
+  reps: number;
+  /** How many times it was forgotten after being remembered. */
+  lapses: number;
+  /** `YYYY-MM-DD` it is next asked for. */
+  due_date: string;
+  /** `YYYY-MM-DD` it was last graded, null when never. */
+  last_review: string | null;
+  created_date: string;
+};
+
+/**
+ * A sitting, booked into a hole in the timetable.
+ *
+ * Not a lecture: nothing to attend, nothing to be marked, and it can be moved
+ * or deleted without touching the week. The weekday is not stored, because a
+ * session is on a date and the timetable's weekday would be a second, different
+ * answer to the same question.
+ */
+export type ReviewSession = {
+  id: Id;
+  /** `YYYY-MM-DD` */
+  date: string;
+  start_time: string;
+  end_time: string;
+  /** The course being reviewed. Empty means whatever is due. */
+  subject_key: string;
+  /** How many cards the sitting was planned for, and how many it took. */
+  card_count: number;
+  /** `auto` when the planner put it there, `manual` when a person did. */
+  source: "auto" | "manual";
+  /** Ticked when the sitting has been done, so it can stop being offered. */
+  done: boolean;
+  created_date: string;
+};
+
 export type Chat = {
   id: Id;
   title: string;
@@ -133,6 +196,8 @@ export type EntityMap = {
   Subject: Subject;
   SubjectEvent: SubjectEvent;
   UniversityEvent: UniversityEvent;
+  Flashcard: Flashcard;
+  ReviewSession: ReviewSession;
   Chat: Chat;
   Message: Message;
 };
@@ -148,6 +213,8 @@ export const ENTITY_NAMES: EntityName[] = [
   "Subject",
   "SubjectEvent",
   "UniversityEvent",
+  "Flashcard",
+  "ReviewSession",
   "Chat",
   "Message",
 ];
