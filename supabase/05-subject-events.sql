@@ -37,6 +37,16 @@ create table if not exists public.subject_events (
 create index if not exists subject_events_user_date_idx
   on public.subject_events (user_id, date);
 
+-- `create table if not exists` says nothing about a table that is already
+-- there: it leaves the old shape untouched and reports success. So a column
+-- added to the definition above is added here too, where a rerun can still
+-- reach a database that was created before the column existed. Without this,
+-- that database keeps accepting events and then rejecting every insert for
+-- want of a column the file says it has.
+alter table public.subject_events
+  add column if not exists remind_minutes integer not null default 60
+  check (remind_minutes between 0 and 10080);
+
 create index if not exists subject_events_user_subject_idx
   on public.subject_events (user_id, subject_key);
 
