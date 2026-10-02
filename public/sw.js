@@ -17,7 +17,14 @@
  * - see `warm` below.
  */
 
-const VERSION = "jadoli-v5";
+/**
+ * Bumped whenever the shell changes, because it is the cache's name and the
+ * only thing that retires the previous one. Leaving it alone across a deploy
+ * means the browser keeps serving the build it cached: the old HTML, the old
+ * chunks, and the old JavaScript, with no way to tell - the app loads, and it
+ * is simply the app as it was before the fix.
+ */
+const VERSION = "jadoli-v6";
 /**
  * Every route the app can open, because a page that is not cached is not
  * merely missing - it is worse than missing. The worker falls back to the home

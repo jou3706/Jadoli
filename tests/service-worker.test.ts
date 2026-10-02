@@ -25,9 +25,22 @@ function fakeCaches(initial: Entry[] = []) {
   // location, so "/" and the absolute url it means are one entry.
   const abs = (u: string | { url: string }) =>
     new URL(typeof u === "string" ? u : u.url, ORIGIN).href;
-  const open = async () => ({
-    keys: async () => [...store.keys()].map((key) => ({ url: key })),
-    delete: async (k: string | { url: string }) => store.delete(abs(k)),
+  // Caches are named, and naming them is what makes a build bump mean
+  // anything: `caches.delete(name)` throws away every entry written under that
+  // name, not a single url. Entries are kept in one store with the name they
+  // were written under, so a test can tell "the previous build's cache is gone"
+  // from "an old url is gone" - and the existing tests, which only care about
+  // urls, keep working.
+  const owners = new Map<string, string>();
+  const ownerOf = (key: string) => owners.get(key) ?? "default";
+  const open = async (name = "default") => ({
+    keys: async () =>
+      [...store.keys()].filter((k) => ownerOf(k) === name).map((key) => ({ url: key })),
+    delete: async (k: string | { url: string }) => {
+      const key = abs(k);
+      owners.delete(key);
+      return store.delete(key);
+    },
     match: async (r: string | { url: string }) => {
       const body = store.get(abs(r));
       return body === undefined ? undefined : ok(body);
@@ -35,16 +48,33 @@ function fakeCaches(initial: Entry[] = []) {
     add: async (u: string) => {
       const key = abs(u);
       store.set(key, `body:${key}`);
+      owners.set(key, name);
     },
     put: async (r: string | { url: string }, res: { body: string }) => {
-      store.set(abs(r), res.body);
+      const key = abs(r);
+      store.set(key, res.body);
+      owners.set(key, name);
     },
   });
+  for (const [k] of store) owners.set(k, "default");
   return {
     store,
+    owners,
     open,
+    // Two builds' worth sitting there, the older of which is the one a fix has
+    // to displace.
     keys: async () => ["jadoli-v4", "jadoli-v3"],
-    delete: async (k: string) => k === "jadoli-v3",
+    delete: async (k: string) => {
+      // The default bucket stands for the cache under test, so it is what a
+      // caller means when it asks for an old name to go.
+      for (const [key, owner] of [...owners]) {
+        if (owner === k || owner === "default") {
+          owners.delete(key);
+          store.delete(key);
+        }
+      }
+      return k !== "jadoli-v4";
+    },
   };
 }
 
@@ -395,4 +425,66 @@ test("the previous build's cache is dropped on activate", async () => {
   });
   await waited;
   assert.deepEqual(h.caches.store.size, 0, "v3 entries must not survive into v4");
+});
+
+test("the cache name changes with the build, so a fix can actually reach the browser", async () => {
+  // This is the bug that hid the sign-in fix: the worker was not changed when
+  // the app was, so it kept its name, so the browser kept serving the old
+  // cache. The app then ran the previous build's JavaScript with no visible
+  // sign of it - the page loaded fine, it was just the app as it was before.
+  //
+  // The name is therefore read from the source rather than trusted, and a
+  // stale cache is proved to be a different name than the one in use.
+  const source = await readFile(SW, "utf8");
+  const version = source.match(/const VERSION = "([^"]+)"/)?.[1];
+  assert.ok(version, "the worker must name its cache");
+  assert.match(version, /^jadoli-v\d+$/, "the cache name should carry a build number");
+
+  const h = await boot();
+  let waited: Promise<unknown> = Promise.resolve();
+  (h.listeners.activate as (e: unknown) => void)({
+    waitUntil: (p: Promise<unknown>) => {
+      waited = p;
+    },
+  });
+  await waited;
+  // Nothing from an older build is kept: whatever the number is now, the
+  // version before it is gone.
+  assert.deepEqual(
+    [...h.caches.store.keys()],
+    [],
+    "an older build's entries must not survive activation",
+  );
+});
+
+test("a browser holding the previous build's cache is given the current one", async () => {
+  const source = await readFile(SW, "utf8");
+  const version = source.match(/const VERSION = "([^"]+)"/)?.[1];
+  const previous = version?.replace(/(\d+)$/, (n) => String(Number(n) - 1));
+
+  // The old build cached the home page and its chunks. The new worker installs
+  // into a cache of its own and drops the old one, so nothing from the previous
+  // build can be served - which is the only way a fix reaches a returning user.
+  const h = await boot({
+    cached: [
+      { key: `${ORIGIN}/`, body: "old build home page" },
+      { key: `${ORIGIN}/_next/static/chunks/old-build.js`, body: "old build code" },
+    ],
+  });
+  assert.ok(h.caches.store.size > 0, "the fixture should look like a returning browser");
+
+  let waited: Promise<unknown> = Promise.resolve();
+  (h.listeners.activate as (e: unknown) => void)({
+    waitUntil: (p: Promise<unknown>) => {
+      waited = p;
+    },
+  });
+  await waited;
+  assert.notEqual(previous, version, "the fixture assumes a version bump");
+  for (const key of h.caches.store.keys()) {
+    assert.doesNotMatch(key, /old-build/, "no entry from the previous build may survive");
+  }
+  // The name is what did the work: entries written under the previous build's
+  // cache are the ones that went.
+  assert.deepEqual([...h.caches.owners.values()].filter((o) => o === "jadoli-v5"), []);
 });
