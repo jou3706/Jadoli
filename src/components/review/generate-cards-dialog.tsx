@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { BookOpen, FileText, Loader2, Sparkles, X } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
+import { getSupabase } from "@/lib/db/supabase-client";
 import { useList, useMutate } from "@/lib/db/store";
 import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
@@ -54,13 +55,25 @@ import type { Material } from "@/lib/db/types";
  */
 const COUNT_CHOICES = [5, 10, 15, 20];
 
-/** Refuse a read before it starts rather than after a slow download. */
-const MAX_READ_BYTES = 12 * 1024 * 1024;
-
 type Draft = GeneratedCard & { keep: boolean };
 
-/** One picked material, with its bytes once they have been read. */
-type Loaded = { material: Material; dataUrl: string; mime: string };
+/**
+ * The signed-in student's token, for the route to read their own files with.
+ *
+ * Empty when the app runs local-first, which is also when there is no bucket and
+ * therefore no uploaded file to read.
+ */
+async function authHeader(): Promise<Record<string, string>> {
+  const sb = getSupabase();
+  if (!sb) return {};
+  try {
+    const { data } = await sb.auth.getSession();
+    const token = data.session?.access_token;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
+}
 
 export function GenerateCardsDialog({
   open,
@@ -137,37 +150,48 @@ export function GenerateCardsDialog({
     );
 
   /**
-   * Reads the picked files into bytes.
+   * Sends the request.
    *
-   * The browser does this rather than the route: the material lives in the
-   * student's own bucket, and the route would otherwise have to be handed a URL
-   * to fetch, which turns a failed read into a server-side request to whatever
-   * that URL happens to point at.
+   * Reads the body as text first, because a failure from the platform itself
+   * (a body over the size limit, a cold start, a timeout) arrives as plain text
+   * or HTML rather than the JSON this route returns. Parsing with `.json()`
+   * directly threw that away and replaced it with "That did not work", which is
+   * the one message that tells the student nothing.
    */
-  const load = async (rows: Material[]): Promise<Loaded[]> => {
-    const out: Loaded[] = [];
-    for (const material of rows) {
-      const url = material.url ?? "";
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`${material.title || "material"}: ${res.status}`);
-      const blob = await res.blob();
-      if (blob.size > MAX_READ_BYTES) {
+  const post = async (body: unknown) => {
+    const res = await fetch("/api/ai/flashcards", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        // The route reads the file on the student's behalf, so it has to know
+        // who they are. Without this it refuses rather than reading anything.
+        ...(await authHeader()),
+      },
+      body: JSON.stringify(body),
+    });
+    const raw = await res.text();
+    let data: {
+      cards?: GeneratedCard[];
+      dropped?: { dropped?: string }[];
+      skipped?: { message?: string }[];
+      error?: string;
+      message?: string;
+    } = {};
+    try {
+      data = raw ? JSON.parse(raw) : {};
+    } catch {
+      if (!res.ok) {
         throw new Error(
           lang === "en"
-            ? `${material.title} is too big to read`
-            : `${material.title} كبير على التوليد`,
+            ? `The server refused the request (${res.status}).`
+            : `السيرفر رفض الطلب (${res.status}).`,
         );
       }
-      const mime = blob.type || "application/pdf";
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result ?? ""));
-        reader.onerror = () => reject(reader.error);
-        reader.readAsDataURL(blob);
-      });
-      out.push({ material, dataUrl, mime });
     }
-    return out;
+    if (!res.ok) {
+      throw new Error(data.message || data.error || tr("فشل الطلب", "That did not work"));
+    }
+    return data;
   };
 
   const generate = async () => {
@@ -179,10 +203,7 @@ export function GenerateCardsDialog({
     const { kept, over } = capSelection(chosen);
     if (over) {
       toast({
-        title: tr(
-          `اخترنا أول ${kept.length} ملف`,
-          `Using the first ${kept.length} files`,
-        ),
+        title: tr(`اخترنا أول ${kept.length} ملف`, `Using the first ${kept.length} files`),
         description: tr(
           `الباقي (${over}) أكبر من اللي النموذج يقرأه مرة واحدة`,
           `The other ${over} are more than one request can read`,
@@ -193,39 +214,33 @@ export function GenerateCardsDialog({
     setBusy(true);
     setDropNote("");
     try {
-      const files = await load(kept);
-      const res = await fetch("/api/ai/flashcards", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "gemini-35-flash",
-          subject: course,
-          text: text.trim(),
-          count,
-          language: lang,
-          materials: files.map((f) => ({
-            title: f.material.title,
-            dataUrl: f.dataUrl,
-            mime: f.mime,
-          })),
-        }),
+      const data = await post({
+        model: "gemini-35-flash",
+        subject: course,
+        text: text.trim(),
+        count,
+        language: lang,
+        materials: kept.map((m) => ({ id: m.id, file_path: m.file_path, title: m.title })),
       });
-      const data = (await res.json().catch(() => ({}))) as {
-        cards?: GeneratedCard[];
-        dropped?: { dropped?: string }[];
-        error?: string;
-      };
-      if (!res.ok) throw new Error(data.error || tr("فشل الطلب", "That did not work"));
 
       const cards = data.cards ?? [];
       setDrafts(cards.map((c) => ({ ...c, keep: true })));
+
+      const notes: string[] = [];
+      const skippedFiles = [...new Set((data.skipped ?? []).map((s) => s.message ?? ""))]
+        .filter(Boolean)
+        .join(lang === "en" ? ", " : "، ");
+      if (skippedFiles) {
+        notes.push(
+          lang === "en" ? `Could not read: ${skippedFiles}` : `مقدرناش نقرأ: ${skippedFiles}`,
+        );
+      }
       const skipped = (data.dropped ?? []).filter((d) => d.dropped);
       if (skipped.length) {
         const reasons = [...new Set(skipped.map((d) => dropReasonLabel(d.dropped ?? "", lang)))];
-        setDropNote(
-          lang === "en" ? `Skipped: ${reasons.join(", ")}` : `اتخطى: ${reasons.join("، ")}`,
-        );
+        notes.push(lang === "en" ? `Skipped: ${reasons.join(", ")}` : `اتخطى: ${reasons.join("، ")}`);
       }
+      setDropNote(notes.join(" · "));
     } catch (e) {
       toast({
         title: tr("مقدرناش نعمل كروت", "Could not make the cards"),

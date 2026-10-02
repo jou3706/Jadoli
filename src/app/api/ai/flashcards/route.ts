@@ -4,6 +4,7 @@ import { extractArray } from "@/lib/ai/extract";
 import { completeJson } from "@/lib/ai/providers";
 import { buildFlashcardsPrompt } from "@/lib/ai/prompts";
 import { cleanGeneratedCards } from "@/lib/flashcards";
+import { loadMaterials, skipReason } from "@/lib/ai/material-fetch";
 import type { ModelId } from "@/lib/ai/models";
 
 export const runtime = "nodejs";
@@ -17,10 +18,10 @@ export const maxDuration = 90;
  * already booked for a date is a card they cannot throw away without also
  * cancelling a session.
  *
- * The attachments arrive as bytes rather than as material URLs on purpose. A URL
- * in the prompt is not opened by the model, it is treated as text, so asking
- * questions about "https://…" produces questions about the string
- * "https://…". Whatever reads the file does it before this point.
+ * The files are read here rather than sent from the browser: the platform caps a
+ * request body at 4.5 MB and base64 adds a third to that, so a lecture PDF
+ * uploaded from the client is refused by the host before this code runs - and the
+ * refusal is plain text, which the dialog cannot read. See lib/ai/material-fetch.
  */
 export async function POST(req: Request) {
   let body: unknown;
@@ -42,29 +43,47 @@ export async function POST(req: Request) {
   const ac = new AbortController();
   req.signal.addEventListener("abort", () => ac.abort(), { once: true });
 
+  const loaded = materials.length
+    ? await loadMaterials(req, materials, ac.signal)
+    : { materials: [], skipped: [] };
+
+  const attached = loaded.materials;
+
+  // Every file asked for failed, and there is nothing else to read. Said plainly,
+  // because "no cards" with no reason is indistinguishable from a broken button.
+  if (!attached.length && !text.trim() && loaded.skipped.length) {
+    const first = loaded.skipped[0];
+    return NextResponse.json(
+      {
+        error: `MATERIALS_UNREADABLE:${first.id}`,
+        reason: first.reason,
+        message: skipReason(first.reason, language),
+      },
+      { status: 422 },
+    );
+  }
+
   const where = subject.trim();
 
   // Naming each file lets the prompt ask for cards that trace back to a page,
   // and tells the model which attachment is which when several are attached.
-  const attached = materials.map(
-    (m, i) => `${i + 1}. ${m.title.trim() || `material ${i + 1}`}`,
-  );
+  const listing = attached.map((m, i) => `${i + 1}. ${m.title.trim() || `material ${i + 1}`}`);
 
   const instruction = [
     `Write up to ${count} revision flashcards${
       where ? ` for the course "${where}"` : ""
     }.`,
-    materials.length
+    listing.length
       ? [
-          attached.length === 1
+          listing.length === 1
             ? "The attached file is a set of notes for this course:"
-            : `These ${attached.length} attached files are notes for this course:`,
-          ...attached,
+            : `These ${listing.length} attached files are notes for this course:`,
+          ...listing,
           "Read the attachments. Base every question on what they actually say.",
         ].join("\n")
       : "",
     text.trim() ? `These are the notes:\n\n"""\n${text.trim()}\n"""` : "",
-    materials.length && text.trim()
+    listing.length && text.trim()
       ? "The pasted notes and the attachments are the same course; use both."
       : "",
   ]
@@ -77,7 +96,7 @@ export async function POST(req: Request) {
       model as ModelId,
       buildFlashcardsPrompt(language, count),
       instruction,
-      materials.map((m) => ({ dataUrl: m.dataUrl, mime: m.mime })),
+      attached.map((m) => ({ dataUrl: m.dataUrl, mime: m.mime })),
       ac.signal,
     );
   } catch (e) {
@@ -90,5 +109,13 @@ export async function POST(req: Request) {
 
   const { cards, dropped } = cleanGeneratedCards(extractArray(raw), { limit: count });
 
-  return NextResponse.json({ cards, dropped });
+  // A file that could not be read is reported, not swallowed: a student told
+  // "twelve cards from three files" has to be able to check that.
+  const skipped = loaded.skipped.map((s) => ({
+    id: s.id,
+    title: s.title,
+    message: skipReason(s.reason, language),
+  }));
+
+  return NextResponse.json({ cards, dropped, skipped });
 }

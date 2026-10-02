@@ -86,13 +86,16 @@ function mimeFromName(name: string): string {
 }
 
 /**
- * A model reads a few megabytes of a PDF before it starts guessing, so an
- * oversized lecture file produces cards that are about the wrong lecture. 12 MB
- * is the point where that trade stops being worth it, and it is below the 25 MB
- * the uploader allows, which means a file can still be saved as a material and
- * only be too big to generate from.
+ * A model will read a few megabytes of a PDF before it starts guessing, so an
+ * oversized lecture file produces cards that are about the wrong lecture. This is
+ * the point where that trade stops being worth it.
+ *
+ * It is a courtesy check, not a limit: the real cap is `MAX_READ_BYTES` in
+ * `lib/ai/material-fetch`, which stops the download. Kept here as well so the
+ * button can grey a file out instead of letting the student pick it, wait, and
+ * fail. Keep the two in step.
  */
-export const MAX_CARDABLE_BYTES = 12 * 1024 * 1024;
+export const MAX_CARDABLE_BYTES = 10 * 1024 * 1024;
 
 /** How many materials one generation may read. Six is already a lot of context. */
 export const MAX_CARDABLE_MATERIALS = 6;

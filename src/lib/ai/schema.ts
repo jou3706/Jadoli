@@ -50,20 +50,17 @@ export const MAX_NOTE_CHARS = 12_000;
  * One file to read, named so the model can be told which question came from
  * which page.
  *
- * `dataUrl` rather than a URL: a URL handed to a model is not fetched, it is
- * quoted back at the student as a question about nothing. The browser reads the
- * material it already has access to and sends the bytes.
+ * A `file_path` and not the bytes. The deployment caps a request body at 4.5 MB,
+ * and base64 makes a file a third bigger, so a lecture PDF sent from the browser
+ * is refused before the model is ever reached - by the platform, with an
+ * unparseable body that looks like the app simply failing. The route reads the
+ * file itself and the browser sends a reference.
  */
-export const materialPart = z.object({
+export const materialRef = z.object({
+  id: z.string().min(1).max(64),
+  /** Storage path, sent for convenience; the route verifies it against the row. */
+  file_path: z.string().max(300).default(""),
   title: z.string().max(200).default(""),
-  dataUrl: z
-    .string()
-    .regex(
-      /^data:(image\/(png|jpeg|jpg|webp)|application\/pdf);base64,[A-Za-z0-9+/=]+$/,
-      { message: "attachment must be a base64 data URL" },
-    )
-    .max(30_000_000),
-  mime: z.string().max(60),
 });
 
 /** Mirrors `MAX_CARDABLE_MATERIALS` in `lib/material-cards`. */
@@ -77,7 +74,7 @@ export const flashcardsBodySchema = z
     /** Notes typed or pasted by the student. */
     text: z.string().max(MAX_NOTE_CHARS).default(""),
     /** Files already saved as materials on the course. */
-    materials: z.array(materialPart).max(MAX_MATERIAL_PARTS).default([]),
+    materials: z.array(materialRef).max(MAX_MATERIAL_PARTS).default([]),
     /** How many cards to ask for. A hint, not a promise. */
     count: z.number().int().min(3).max(40).default(10),
     language: z.enum(["ar", "en"]).default("ar"),
