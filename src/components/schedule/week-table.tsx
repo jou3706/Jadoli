@@ -7,6 +7,7 @@ import { lectureStatus, lectureTitle } from "@/lib/schedule";
 import { cn } from "@/lib/utils";
 import { toMinutes } from "@/lib/utils";
 import type { Lecture } from "@/lib/db/types";
+import { SubjectEventsFor } from "@/components/subjects/subject-events-popover";
 
 type Cell = { h: number; span: number; lecture: Lecture | null };
 
@@ -136,6 +137,9 @@ export const WeekTable = forwardRef<
                         <p className="line-clamp-1 text-xs opacity-80">
                           {lecture.doctor}
                         </p>
+                        <div className="relative z-10 mt-1 inline-flex">
+                          <SubjectEventsFor subject={lecture.subject_name} />
+                        </div>
                       </button>
                     </td>
                   );

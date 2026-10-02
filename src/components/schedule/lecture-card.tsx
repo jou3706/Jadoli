@@ -12,6 +12,7 @@ import {
 import { cn, formatTime, toMinutes } from "@/lib/utils";
 import type { Lecture } from "@/lib/db/types";
 import { Button } from "@/components/ui/button";
+import { SubjectEventsFor } from "@/components/subjects/subject-events-popover";
 
 export function LiveBadge() {
   return (
@@ -76,6 +77,7 @@ export function LectureCard({
                 {lectureKindLabel(lecture.kind, lang)}
               </span>
             )}
+            <SubjectEventsFor subject={lecture.subject_name} />
           </div>
 
           {subtitle && (

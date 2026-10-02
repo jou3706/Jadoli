@@ -67,6 +67,32 @@ export type Subject = {
   created_date: string;
 };
 
+/** What an event on a course is: a quiz, an exam, or something else due. */
+export type SubjectEventKind = "quiz" | "exam" | "assignment" | "other";
+
+/**
+ * Something due on a course: a quiz, an exam, a submission.
+ *
+ * Not a column on the lecture. An exam happens on a date rather than a weekday,
+ * and a course can have exams before it has any sessions at all. Keyed to the
+ * course by name, the way `Material.subject_key` is.
+ */
+export type SubjectEvent = {
+  id: Id;
+  subject_key: string;
+  title: string;
+  kind: SubjectEventKind;
+  /** A calendar date, `YYYY-MM-DD`. */
+  date: string;
+  /** `HH:MM`, empty when the event has no set time. */
+  start_time: string;
+  /** `HH:MM`, empty when the event has no set time. */
+  end_time: string;
+  hall: string;
+  note: string;
+  created_date: string;
+};
+
 export type UniversityEvent = {
   id: Id;
   title: string;
@@ -103,6 +129,7 @@ export type EntityMap = {
   Hall: Hall;
   Material: Material;
   Subject: Subject;
+  SubjectEvent: SubjectEvent;
   UniversityEvent: UniversityEvent;
   Chat: Chat;
   Message: Message;
@@ -117,6 +144,7 @@ export const ENTITY_NAMES: EntityName[] = [
   "Hall",
   "Material",
   "Subject",
+  "SubjectEvent",
   "UniversityEvent",
   "Chat",
   "Message",

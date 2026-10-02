@@ -26,8 +26,9 @@ declare
   t text;
 begin
   foreach t in array array[
-    'lectures', 'attendance', 'grades', 'halls', 'materials',
-    'subjects', 'university_events', 'chats', 'messages', 'share_links'
+'lectures', 'attendance', 'grades', 'halls', 'materials',
+      'subjects', 'subject_events', 'university_events', 'chats', 'messages',
+      'share_links'
   ] loop
     execute format('alter table public.%I enable row level security', t);
   end loop;

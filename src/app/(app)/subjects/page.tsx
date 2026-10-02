@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import { useMemo, useState } from "react";
-import { Clock, MapPin, Pencil, Plus, Trash2, User } from "lucide-react";
+import { CalendarClock, Clock, MapPin, Pencil, Plus, Trash2, User } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { useList, useMutate } from "@/lib/db/store";
 import { useScheduleContext } from "@/lib/schedule-context";
@@ -15,7 +15,9 @@ import { detectKind } from "@/lib/materials";
 import { SubjectCoverTile } from "@/components/subjects/subject-cover";
 import { AddMaterialRow } from "@/components/subjects/add-material-row";
 import { SubjectMaterialsDialog } from "@/components/subjects/subject-materials-dialog";
-import type { Lecture, Material } from "@/lib/db/types";
+import { SubjectEventsDialog } from "@/components/subjects/subject-events-dialog";
+import { eventsForSubject } from "@/lib/subject-events";
+import type { Lecture, Material, SubjectEvent } from "@/lib/db/types";
 
 /* ── Subject card ──────────────────────────────────────────── */
 
@@ -38,7 +40,16 @@ function SubjectCard({
   const { create: createMaterial } = useMutate("Material");
   const { data: subjects = [] } = useList("Subject");
   const { create: createSubject, update: updateSubject } = useMutate("Subject");
+  const { data: allEvents = [] } = useList("SubjectEvent", "date", 500);
   const [materialsOpen, setMaterialsOpen] = useState(false);
+  const [eventsOpen, setEventsOpen] = useState(false);
+
+  // The count on the button, so a course with something due is visible without
+  // opening anything. Matched the same way the schedule matches it.
+  const eventCount = useMemo(
+    () => eventsForSubject(allEvents as SubjectEvent[], name).length,
+    [allEvents, name],
+  );
 
   const first = sessions[0] ?? materials[0];
   const en = sessions[0]?.subject_en ?? "";
@@ -267,16 +278,27 @@ function SubjectCard({
       {/* the drop target: drag a file from the desktop onto this row */}
       <AddMaterialRow subjectKey={name} onAdd={addFile} onAddLink={addLink} />
 
-      <div className="border-t px-3 py-1.5 text-center">
+      <div className="flex items-center gap-1 border-t">
         <button
           type="button"
           onClick={() => setMaterialsOpen(true)}
-          className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
+          className="flex flex-1 items-center justify-center gap-1 py-1.5 text-xs text-muted-foreground hover:text-primary"
         >
           <Plus className="h-3 w-3" />
           {materials.length > 0
             ? tr("إدارة المواد", "Manage materials")
             : tr("أضف مادة", "Add a material")}
+        </button>
+        <span className="h-4 w-px bg-border" />
+        <button
+          type="button"
+          onClick={() => setEventsOpen(true)}
+          className="flex flex-1 items-center justify-center gap-1 py-1.5 text-xs text-muted-foreground hover:text-primary"
+        >
+          <CalendarClock className="h-3 w-3" />
+          {eventCount > 0
+            ? tr(`الأحداث (${eventCount})`, `Events (${eventCount})`)
+            : tr("أضف حدث", "Add an event")}
         </button>
       </div>
 
@@ -289,6 +311,12 @@ function SubjectCard({
         onReuse={reuseMaterial}
         onAdd={addFile}
         onAddLink={addLink}
+      />
+
+      <SubjectEventsDialog
+        open={eventsOpen}
+        onOpenChange={setEventsOpen}
+        subject={name}
       />
     </div>
   );

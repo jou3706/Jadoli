@@ -24,7 +24,7 @@
  * chunks, and the old JavaScript, with no way to tell - the app loads, and it
  * is simply the app as it was before the fix.
  */
-const VERSION = "jadoli-v6";
+const VERSION = "jadoli-v7";
 /**
  * Every route the app can open, because a page that is not cached is not
  * merely missing - it is worse than missing. The worker falls back to the home

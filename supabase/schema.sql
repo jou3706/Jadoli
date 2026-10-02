@@ -95,6 +95,40 @@ create table if not exists public.subjects (
 create unique index if not exists subjects_user_name_key
   on public.subjects (user_id, name);
 
+-- A quiz, an exam, or anything else due on a course.
+--
+-- Not a column on `lectures`: an exam happens on a date rather than a weekday,
+-- and a course can have exams before it has any sessions at all. Keyed to the
+-- course by name, the way materials.subject_key is. See 05-subject-events.sql
+-- for the deployed version of this table.
+
+create table if not exists public.subject_events (
+  id            uuid primary key default gen_random_uuid(),
+  user_id       uuid not null references auth.users on delete cascade,
+  subject_key   text not null default '',
+  title         text not null default '',
+  kind          text not null default 'quiz'
+                  check (kind in ('quiz','exam','assignment','other')),
+  date          date not null,
+  start_time    text not null default ''
+                  check (start_time = '' or start_time ~ '^[0-2][0-9]:[0-5][0-9]$'),
+  end_time      text not null default ''
+                  check (end_time = '' or end_time ~ '^[0-2][0-9]:[0-5][0-9]$'),
+  hall          text not null default '',
+  note          text not null default '',
+  created_date  timestamptz not null default now(),
+  updated_date  timestamptz not null default now()
+);
+
+create index if not exists subject_events_user_date_idx
+  on public.subject_events (user_id, date);
+
+create index if not exists subject_events_user_subject_idx
+  on public.subject_events (user_id, subject_key);
+
+create unique index if not exists subject_events_user_subject_title_date_key
+  on public.subject_events (user_id, lower(btrim(subject_key)), lower(btrim(title)), date);
+
 create table if not exists public.university_events (
   id            uuid primary key default gen_random_uuid(),
   user_id       uuid not null references auth.users on delete cascade,
@@ -139,6 +173,7 @@ alter table public.grades            enable row level security;
 alter table public.halls             enable row level security;
 alter table public.materials         enable row level security;
 alter table public.subjects          enable row level security;
+alter table public.subject_events    enable row level security;
 alter table public.university_events enable row level security;
 alter table public.chats             enable row level security;
 alter table public.messages          enable row level security;
@@ -149,7 +184,7 @@ declare
 begin
   foreach t in array array[
     'lectures','attendance','grades','halls','materials','subjects',
-    'university_events','chats','messages'
+    'subject_events','university_events','chats','messages'
   ]
   loop
     execute format('drop policy if exists %I on public.%I', t || '_own', t);
