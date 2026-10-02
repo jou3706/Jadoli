@@ -48,13 +48,3 @@ export function isOwnPath(path: string, userId: string): boolean {
   // separator has to be part of the test rather than a string prefix.
   return p.startsWith(`${userId}/`);
 }
-
-/**
- * Percent-encodes each segment but keeps the separators.
- *
- * Encoding the whole path would turn `uid/files/a.pdf` into one long segment,
- * which the storage bucket does not resolve.
- */
-export function encodeStoragePath(path: string): string {
-  return path.split("/").map(encodeURIComponent).join("/");
-}

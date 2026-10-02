@@ -9,26 +9,26 @@ import "server-only";
  * a plain-text 413 rather than the JSON the app expects, which is why it showed up
  * as a bare "Could not make the cards" with no explanation.
  *
- * So the browser sends a reference and this module does the reading.
+ * So the browser sends a reference and this module does the reading, through the
+ * caller's own authenticated storage client. Two rules make that safe:
  *
- * Two rules make that safe:
+ *  1. The client is bound to the caller's token, so RLS and the storage policies
+ *     apply exactly as they did on upload. A file the caller could not write is a
+ *     file it cannot read.
+ *  2. The path is taken from the database row, never from the request body, and
+ *     has to start with the caller's own user id - the same rule the upload policy
+ *     enforces - so one student cannot read another's file by naming a path.
  *
- *  1. The URL is built here, from the project's own storage host. A path that
- *     does not sit under that host is never fetched, so this cannot be turned
- *     into a request to somewhere else on the network.
- *  2. The path has to start with the caller's own user id - the same rule the
- *     upload policy enforces - so one student cannot read another's file by
- *     guessing a name.
+ * The stored path is passed through verbatim. Percent-encoding it is wrong: the
+ * storage API matches the key as stored, so `my file.pdf` and `my%20file.pdf` are
+ * different objects, and only the first one exists. An upload name keeps its spaces
+ * in the database, so encoding here finds nothing and the read fails as a bare 400.
  */
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 import { BUCKET } from "@/lib/db/storage";
-import {
-  encodeStoragePath,
-  isOwnPath,
-  mimeForName,
-} from "./material-path";
+import { isOwnPath, mimeForName } from "./material-path";
 
 /** The one table this module reads. Named here rather than imported from the
  * client writer, because that module is browser-side by design. */

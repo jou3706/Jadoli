@@ -4,7 +4,6 @@ import {
   applyOp,
   coalesce,
   emptySnapshot,
-  isNetworkError,
   isRetryableLater,
   AuthExpiredError,
   OfflineError,
