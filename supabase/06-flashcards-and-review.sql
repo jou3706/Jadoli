@@ -33,7 +33,10 @@ create table if not exists public.flashcards (
   -- Null rather than empty: "never reviewed" is not a date, and a null column
   -- is the one thing the database itself agrees is the truth.
   last_review    date,
-  created_date   timestamptz not null default now()
+  created_date   timestamptz not null default now(),
+  -- The client stamps updated_date on every insert; without this column the
+  -- whole card row is rejected with PGRST204. See supabase/07-updated-date.sql.
+  updated_date   timestamptz not null default now()
 );
 
 -- A card generated for a lecture that was already on the plan is the same card

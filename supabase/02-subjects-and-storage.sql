@@ -5,6 +5,9 @@
 -- ── 1. Uploaded files on materials ──────────────────────────────────────
 alter table public.materials add column if not exists file_path text not null default '';
 alter table public.materials add column if not exists size bigint not null default 0;
+-- The client stamps updated_date on every insert; see supabase/07-updated-date.sql.
+alter table public.materials
+  add column if not exists updated_date timestamptz not null default now();
 
 create index if not exists materials_subject_idx
   on public.materials (user_id, subject_key);
@@ -16,7 +19,8 @@ create table if not exists public.subjects (
   name          text not null,
   image_url     text not null default '',
   image_credit  text not null default '',
-  created_date  timestamptz not null default now()
+  created_date  timestamptz not null default now(),
+  updated_date  timestamptz not null default now()
 );
 
 -- Added after the first run: the picked Wikimedia image needs its credit.

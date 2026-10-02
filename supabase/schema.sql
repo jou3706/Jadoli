@@ -32,7 +32,8 @@ create table if not exists public.attendance (
   lecture_id   uuid not null references public.lectures on delete cascade,
   date         date not null,
   week_start   date not null,
-  created_date timestamptz not null default now()
+  created_date timestamptz not null default now(),
+  updated_date    timestamptz not null default now()
 );
 
 create unique index if not exists attendance_unique_week
@@ -74,7 +75,8 @@ create table if not exists public.materials (
   -- Set when the file was uploaded to Storage (empty for a plain link).
   file_path     text not null default '',
   size          bigint not null default 0,
-  created_date  timestamptz not null default now()
+  created_date  timestamptz not null default now(),
+  updated_date  timestamptz not null default now()
 );
 
 create index if not exists materials_subject_idx on public.materials (user_id, subject_key);
@@ -89,7 +91,8 @@ create table if not exists public.subjects (
   name          text not null,
   image_url     text not null default '',
   image_credit  text not null default '',
-  created_date  timestamptz not null default now()
+  created_date  timestamptz not null default now(),
+  updated_date  timestamptz not null default now()
 );
 
 create unique index if not exists subjects_user_name_key
@@ -167,7 +170,8 @@ create table if not exists public.flashcards (
   lapses         integer not null default 0 check (lapses >= 0),
   due_date       date not null default current_date,
   last_review    date,
-  created_date   timestamptz not null default now()
+  created_date   timestamptz not null default now(),
+  updated_date    timestamptz not null default now()
 );
 
 -- The queue is read by due date for one account, constantly.
@@ -217,10 +221,47 @@ create table if not exists public.messages (
   text          text not null default '',
   file_text     text,
   attachments   jsonb,
-  created_date  timestamptz not null default now()
+  created_date  timestamptz not null default now(),
+  updated_date    timestamptz not null default now()
 );
 
 create index if not exists messages_chat_idx on public.messages (chat_id, created_date);
+
+-- ── updated_date ──────────────────────────────────────────────────────
+-- Every table above carries this because the client stamps it on every insert.
+-- The trigger is what keeps it honest afterwards: the client does not send it on
+-- every edit, and a column that means "when this row was last touched" has to
+-- move on its own. See supabase/07-updated-date.sql for the deployed version.
+
+create or replace function public.set_updated_date()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_date := now();
+  return new;
+end;
+$$;
+
+do $$
+declare
+  t text;
+begin
+  foreach t in array array[
+    'lectures','attendance','grades','halls','materials','subjects',
+    'subject_events','university_events','flashcards','review_sessions',
+    'chats','messages'
+  ]
+  loop
+    execute format('drop trigger if exists %I_set_updated_date on public.%I', t, t);
+    execute format(
+      'create trigger %I_set_updated_date before update on public.%I
+       for each row execute function public.set_updated_date()',
+      t, t
+    );
+  end loop;
+end;
+$$;
 
 -- ── Row level security ────────────────────────────────────────────────
 -- Each student only ever sees and touches their own rows.
