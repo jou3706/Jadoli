@@ -19,6 +19,8 @@ export type ChatRequest = {
   question: string;
   images?: ImagePart[];
   signal?: AbortSignal;
+  /** Ask the provider to emit only syntactically valid JSON. */
+  json?: boolean;
   onToken: (delta: string) => void;
 };
 
@@ -86,7 +88,12 @@ async function streamGemini(
       body: JSON.stringify({
         systemInstruction: { parts: [{ text: req.system }] },
         contents: conversation,
-        generationConfig: { temperature: 0.3 },
+        generationConfig: {
+          temperature: 0.3,
+          // Constrains the model to valid JSON, which is the difference between
+          // an exam and "Unexpected token" when it forgets a quote.
+          ...(req.json ? { responseMimeType: "application/json" } : {}),
+        },
       }),
       signal: abort.signal,
     },
@@ -182,6 +189,9 @@ async function streamOpenAICompatible(
       model,
       stream: true,
       temperature: 0.3,
+      // Groq honours JSON mode; OpenRouter forwards it to models that may not
+      // support it, so there it is left to the prompt.
+      ...(req.json && host.includes("groq") ? { response_format: { type: "json_object" } } : {}),
       messages: [
         { role: "system", content: req.system },
         ...req.history.map((t) => ({ role: t.role, content: t.text })),
@@ -316,6 +326,12 @@ export async function completeJson(
   user: string,
   images?: ImagePart[],
   signal?: AbortSignal,
+  /**
+   * Ask the provider to constrain the reply to JSON. Only for callers that want
+   * a JSON *object*: OpenAI/Groq's JSON mode cannot return a bare array, so the
+   * list-returning callers leave it off and rely on the prompt and the extractor.
+   */
+  json = false,
 ): Promise<string> {
   let out = "";
   await streamChat({
@@ -325,6 +341,7 @@ export async function completeJson(
     question: user,
     images,
     signal,
+    json,
     onToken: (t) => {
       out += t;
     },

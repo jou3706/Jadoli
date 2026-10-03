@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useFilter, useList, useMutate } from "@/lib/db/store";
 import type { Id, Message } from "@/lib/db/types";
 
@@ -22,9 +22,11 @@ const MAX_TEXT = 8000;
 const NO_CHAT = "00000000-0000-0000-0000-000000000000";
 
 export function useChats() {
-  const { data: chats, isLoading } = useList("Chat", "-updated_date", MAX_CHATS);
-  // `undefined` = not initialised yet, `null` = an empty new chat.
-  const [activeId, setActiveId] = useState<Id | null | undefined>(undefined);
+  const { data: chats } = useList("Chat", "-updated_date", MAX_CHATS);
+  // Opening the assistant always starts a fresh, unsaved thread. Past
+  // conversations are not gone — they are in the list and open when picked —
+  // they are just never reopened automatically.
+  const [activeId, setActiveId] = useState<Id | null>(null);
 
   const { data: messages } = useFilter(
     "Message",
@@ -36,13 +38,6 @@ export function useChats() {
 
   const chat = useMutate("Chat");
   const msg = useMutate("Message");
-
-  // Open the newest thread on first load; afterwards a `null` selection is the
-  // user's explicit "new chat", so it must not be overridden.
-  useEffect(() => {
-    if (isLoading || activeId !== undefined) return;
-    setActiveId(chats?.[0]?.id ?? null);
-  }, [isLoading, chats, activeId]);
 
   const turns = useMemo<StoredTurn[]>(
     () =>
@@ -107,7 +102,6 @@ export function useChats() {
 
   return {
     chats: chats ?? [],
-    isLoading,
     activeId: activeId ?? null,
     turns,
     newChat,

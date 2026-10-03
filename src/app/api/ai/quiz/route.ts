@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { completeJson } from "@/lib/ai/providers";
+import { extractJson } from "@/lib/ai/extract";
 import { buildQuizPrompt } from "@/lib/ai/prompts";
-import { quizSetSchema, quizSourceSchema } from "@/lib/ai/schema";
+import { quizSetSchema, quizSourceSchema, type QuizSet } from "@/lib/ai/schema";
 import { loadMaterials, skipReason } from "@/lib/ai/material-fetch";
 import type { ModelId } from "@/lib/ai/models";
 
@@ -75,18 +76,33 @@ export async function POST(req: Request) {
   const user = parts.join("\n");
 
   try {
-    const raw = await completeJson(
-      "gemini-35-flash" as ModelId,
-      buildQuizPrompt(src.language),
-      user,
-      attached.length ? attached.map((m) => ({ dataUrl: m.dataUrl, mime: m.mime })) : undefined,
-      ac.signal,
-    );
-    const parsed = quizSetSchema.safeParse(JSON.parse(raw));
-    if (!parsed.success) {
-      throw new Error(parsed.error.issues[0]?.message || "invalid quiz format");
+    const system = buildQuizPrompt(src.language);
+    const images = attached.length
+      ? attached.map((m) => ({ dataUrl: m.dataUrl, mime: m.mime }))
+      : undefined;
+    // The provider is asked for JSON and extracts the first balanced value, but a
+    // model can still slip once. A single retry turns a formatting hiccup into an
+    // exam instead of an error the student cannot act on.
+    let set: QuizSet | null = null;
+    for (let attempt = 0; attempt < 2 && !set; attempt += 1) {
+      const raw = await completeJson(
+        "gemini-35-flash" as ModelId,
+        system,
+        user,
+        images,
+        ac.signal,
+        true,
+      );
+      const parsed = quizSetSchema.safeParse(extractJson(raw));
+      if (parsed.success) set = parsed.data;
     }
-    return NextResponse.json(parsed.data);
+    if (!set) {
+      return NextResponse.json(
+        { error: "the model did not return a usable exam, please try again" },
+        { status: 502 },
+      );
+    }
+    return NextResponse.json(set);
   } catch (e) {
     const err = e as Error;
     return NextResponse.json({ error: err.message || "generation failed" }, { status: 500 });

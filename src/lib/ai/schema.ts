@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { extractJson } from "./extract";
 
 const turn = z.object({
   role: z.enum(["user", "assistant"]),
@@ -126,6 +127,10 @@ export function mcqCorrectIndex(q: QuizQuestion): number {
 
 /** Pulls a quiz out of model output: bare JSON, a ```json fence, or JSON in prose. */
 export function parseQuiz(text: string): QuizSet | null {
+  // The balanced extractor first: it reads fences, leading prose and a trailing
+  // sentence in one pass, and understands braces inside a quoted answer.
+  const direct = quizSetSchema.safeParse(extractJson(text));
+  if (direct.success) return direct.data;
   const candidates = [text.trim()];
   const fence = /```(?:json)?\s*([\s\S]*?)```/gi;
   let m: RegExpExecArray | null;
