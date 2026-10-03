@@ -102,6 +102,7 @@ const ALLOWED: Record<AssistantMode, Set<string>> = {
     "add_material",
   ]),
   materials: new Set(["add_material"]),
+  quiz: new Set([]),
 };
 
 /**

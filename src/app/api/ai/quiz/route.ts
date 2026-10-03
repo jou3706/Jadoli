@@ -57,15 +57,18 @@ export async function POST(req: Request) {
   const user = parts.join("\n");
 
   try {
-    const result = await completeJson({
-      model: "gemini-35-flash" as ModelId,
-      system: QUIZ_SYSTEM,
-      question: user,
-      dataUrls: loaded?.materials?.map((m) => ({ dataUrl: m.dataUrl, mime: m.mime })) ?? [],
-      schema: quizSetSchema,
-      signal: ac.signal,
-    });
-    return NextResponse.json(result);
+    const raw = await completeJson(
+      "gemini-35-flash" as ModelId,
+      QUIZ_SYSTEM,
+      user,
+      undefined,
+      ac.signal,
+    );
+    const parsed = quizSetSchema.safeParse(JSON.parse(raw));
+    if (!parsed.success) {
+      throw new Error(parsed.error.issues[0]?.message || "invalid quiz format");
+    }
+    return NextResponse.json(parsed.data);
   } catch (e) {
     const err = e as Error;
     return NextResponse.json({ error: err.message || "generation failed" }, { status: 500 });
