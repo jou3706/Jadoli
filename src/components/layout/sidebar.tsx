@@ -55,13 +55,13 @@ export function Sidebar({
     <aside className="fixed inset-y-0 start-0 z-40 hidden w-20 flex-col items-center border-e bg-card py-6 lg:flex">
       <Link
         href="/"
-        className="font-display text-xl font-bold text-primary"
+        className="shrink-0 font-display text-xl font-bold text-primary"
         aria-label="Jadoli"
       >
         {tr("جدولي", "Jadwali")}
       </Link>
 
-      <nav className="mt-8 flex flex-col gap-2">
+      <nav className="scrollbar-thin mt-8 flex min-h-0 w-full flex-1 flex-col items-center gap-2 overflow-y-auto px-1 pb-2">
         {NAV.map(({ to, ar, en, Icon }) => {
           const active = to === "/" ? pathname === "/" : pathname.startsWith(to);
           return (
@@ -83,7 +83,7 @@ export function Sidebar({
         })}
       </nav>
 
-      <div className="mt-auto flex flex-col items-center gap-2">
+      <div className="mt-auto flex shrink-0 flex-col items-center gap-2 pt-2">
         <ThemeToggle variant="ghost" />
         <LangToggle variant="ghost" />
         <Button
