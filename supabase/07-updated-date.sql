@@ -28,6 +28,25 @@ alter table public.subjects
 alter table public.messages
   add column if not exists updated_date timestamptz not null default now();
 
+-- flashcards needs the same repair, and its absence is why this file listed only
+-- four tables at first. That list was built from the tables missing the column on
+-- a fresh install, where 06 creates flashcards *with* updated_date. On a database
+-- where flashcards already existed - because 06 ran before the column was added to
+-- it - 06 skips the create entirely and the column never appears, so the first
+-- card save failed with:
+--
+--   PGRST204: Could not find the 'updated_date' column of 'flashcards'
+--
+-- Guarded on the table existing, so this stays runnable before 06 as well.
+do $$
+begin
+  if to_regclass('public.flashcards') is not null then
+    alter table public.flashcards
+      add column if not exists updated_date timestamptz not null default now();
+  end if;
+end;
+$$;
+
 -- The client stamps this on insert, but not on every edit path, and a column
 -- that means "when this row was last touched" has to move on its own. The
 -- trigger is what makes the value true rather than merely present.
@@ -72,3 +91,36 @@ $$;
 -- fix having failed. Supabase sends this itself for changes made through the
 -- dashboard's table editor; a pasted migration does not always wait for it.
 notify pgrst, 'reload schema';
+
+-- Read the result back instead of asking the student to trust that it worked.
+-- Every table the client writes has to be listed here as present; anything still
+-- missing would otherwise fail much later, as a save error with no obvious cause.
+do $$
+declare
+  t text;
+  missing text := '';
+begin
+  foreach t in array array[
+    'lectures','attendance','grades','halls','materials','subjects',
+    'subject_events','university_events','flashcards','review_sessions',
+    'chats','messages'
+  ]
+  loop
+    if to_regclass(format('public.%I', t)) is null then
+      continue;
+    end if;
+    if not exists (
+      select 1 from information_schema.columns
+      where table_schema = 'public' and table_name = t and column_name = 'updated_date'
+    ) then
+      missing := missing || t || ' ';
+    end if;
+  end loop;
+
+  if missing = '' then
+    raise notice 'OK: updated_date present on every table the app writes';
+  else
+    raise exception 'STILL MISSING updated_date on: %', missing;
+  end if;
+end;
+$$;

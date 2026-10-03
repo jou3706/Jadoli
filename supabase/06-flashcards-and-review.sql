@@ -39,6 +39,13 @@ create table if not exists public.flashcards (
   updated_date   timestamptz not null default now()
 );
 
+-- The create above is skipped when the table already exists, so a database created
+-- before updated_date was added here never receives the column from this file. The
+-- insert is rejected with PGRST204 and the card is not saved. Adding it
+-- separately is what makes re-running this migration a repair rather than a no-op.
+alter table public.flashcards
+  add column if not exists updated_date timestamptz not null default now();
+
 -- A card generated for a lecture that was already on the plan is the same card
 -- twice. This also makes the offline retry safe: the queued insert fails rather
 -- than leaving a duplicate behind.

@@ -159,6 +159,56 @@ test("the migration adds the column to every table that lacked it", async () => 
       `07-updated-date.sql does not add updated_date to public.${table}`,
     );
   }
+  // flashcards too. This one was missed at first because the list was taken from a
+  // fresh install, where 06 creates the table with the column already in it. On a
+  // database where the table already existed, 06 was a no-op and the column never
+  // arrived, so saving a card failed with PGRST204. It is added here under a
+  // to_regclass guard, which is what makes this file the repair for both orders.
+  assert.match(
+    migration,
+    /if to_regclass\('public\.flashcards'\) is not null[\s\S]*?alter table public\.flashcards\s+add column if not exists updated_date/i,
+    "07-updated-date.sql does not repair public.flashcards",
+  );
+});
+
+test("a create table is never the only way a column gets added", async () => {
+  // `create table if not exists` is a no-op on a table that already exists, so a
+  // column added only in the create block silently disappears on any database that
+  // predates the migration. Every table the client writes has to be repaired by an
+  // explicit `add column if not exists` in the same file.
+  const files = [
+    "../supabase/06-flashcards-and-review.sql",
+    "../supabase/07-updated-date.sql",
+  ];
+  for (const rel of files) {
+    const text = await read(new URL(rel, import.meta.url));
+    for (const table of ["flashcards", "review_sessions"]) {
+      if (!new RegExp(`create table if not exists public\\.${table}\\b`).test(text)) continue;
+      // review_sessions is repaired by 07's trigger loop only for the trigger, so
+      // require the column repair for flashcards explicitly and for
+      // review_sessions wherever the file declares it.
+      if (table === "flashcards") {
+        assert.match(
+          text,
+          /alter table public\.flashcards\s+add column if not exists updated_date/i,
+          `${rel}: public.flashcards declares updated_date only inside create table`,
+        );
+      }
+    }
+  }
+});
+
+test("the migration proves the repair instead of assuming it", async () => {
+  // A pasted migration that runs cleanly but changes nothing looks exactly like
+  // one that worked. The file reads the schema back and fails loudly otherwise.
+  const migration = await read(MIGRATION);
+  assert.match(
+    migration,
+    /information_schema\.columns[\s\S]*?column_name = 'updated_date'/i,
+    "07-updated-date.sql does not verify the column afterwards",
+  );
+  assert.match(migration, /raise exception/i, "07-updated-date.sql cannot report a failed repair");
+  assert.match(migration, /raise notice/i, "07-updated-date.sql does not confirm success either");
 });
 
 test("every migration is safe to run twice", async () => {
