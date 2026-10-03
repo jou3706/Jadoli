@@ -23,7 +23,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { session, isLoading, signOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
-  const { editMode, setEditMode, openForm } = useScheduleContext();
+  const { editMode, openForm } = useScheduleContext();
 
   const isAssistant = pathname === "/assistant";
   // The floating button opens the lecture form, so it makes no sense on the
@@ -39,7 +39,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen overflow-x-clip bg-background">
-      <Sidebar editMode={editMode} onToggleEdit={() => setEditMode((p) => !p)} />
+      <Sidebar />
 
       <div className="lg:ps-20">
         <Header editMode={editMode} hideOnMobile={isAssistant} />

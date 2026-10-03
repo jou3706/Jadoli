@@ -9,19 +9,15 @@ import {
   CalendarRange,
   ClipboardCheck,
   DoorOpen,
-  Eye,
   GraduationCap,
   LayoutGrid,
   Layers,
   ListChecks,
-  Pencil,
   Sparkles,
   Upload,
 } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
-import { useScheduleContext } from "@/lib/schedule-context";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 
 export const NAV = [
   { to: "/", ar: "الجدول", en: "Schedule", Icon: LayoutGrid },
@@ -38,16 +34,9 @@ export const NAV = [
   { to: "/import", ar: "استيراد", en: "Import", Icon: Upload },
 ] as const;
 
-export function Sidebar({
-  editMode,
-  onToggleEdit,
-}: {
-  editMode: boolean;
-  onToggleEdit: () => void;
-}) {
+export function Sidebar() {
   const { tr } = useI18n();
   const pathname = usePathname();
-  const { setEditMode } = useScheduleContext();
 
   return (
     <aside className="fixed inset-y-0 start-0 z-40 hidden w-20 flex-col items-center border-e bg-card py-6 lg:flex">
@@ -80,20 +69,6 @@ export function Sidebar({
           );
         })}
       </nav>
-
-      <div className="mt-auto flex shrink-0 flex-col items-center gap-2 pt-2">
-        <Button
-          onClick={() => {
-            setEditMode(editMode);
-            onToggleEdit();
-          }}
-          className="flex w-16 flex-col items-center gap-1 rounded-xl py-2.5 text-xs font-medium"
-          variant={editMode ? "default" : "ghost"}
-        >
-          {editMode ? <Eye className="h-5 w-5" /> : <Pencil className="h-5 w-5" />}
-          {tr(editMode ? "عرض" : "تعديل", editMode ? "View" : "Edit")}
-        </Button>
-      </div>
     </aside>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Bell, BellRing, CloudOff, CloudUpload, LogOut, Search, X } from "lucide-react";
+import { Bell, BellRing, Check, CloudOff, CloudUpload, LogOut, Pencil, Search, X } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/db/auth";
 import { useList, useOffline } from "@/lib/db/store";
@@ -64,7 +64,7 @@ export function Header({
   hideOnMobile: boolean;
 }) {
   const { tr, lang } = useI18n();
-  const { search, setSearch } = useScheduleContext();
+  const { search, setSearch, setEditMode } = useScheduleContext();
   const { session, signOut } = useAuth();
   const { data: lectures } = useList("Lecture", "-created_date", 300);
   const {
@@ -139,6 +139,22 @@ export function Header({
         )}
 
         <div className="ms-auto flex items-center gap-1.5">
+          {/*
+            The one control that used to sit alone in the sidebar footer. It lives
+            up here now so the sidebar is nothing but pages, and because toggling
+            edit mode is a top-level action, not a page.
+          */}
+          <Button
+            variant={editMode ? "default" : "outline"}
+            size="sm"
+            onClick={() => setEditMode((p) => !p)}
+            aria-pressed={editMode}
+            className="hidden h-9 gap-1.5 lg:inline-flex"
+          >
+            {editMode ? <Check className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
+            {tr(editMode ? "تم" : "تعديل", editMode ? "Done" : "Edit")}
+          </Button>
+
           <OfflineBadge />
 
           <div className="relative hidden sm:block">
