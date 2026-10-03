@@ -13,6 +13,8 @@
  * is silent, and the interface says so rather than pretending.
  */
 
+import { soundEnabled } from "./alarm-prefs";
+
 type Ctx = AudioContext & { __jadoliAlarm?: boolean };
 
 let ctx: Ctx | null = null;
@@ -125,7 +127,6 @@ export class Alarm {
     const c = context();
     if (!c) return;
     this.running = true;
-    if (c.state === "suspended") void c.resume();
 
     const tick = () => {
       if (!this.running || !ctx) return;
@@ -133,6 +134,13 @@ export class Alarm {
       // these references are all this needs to hold. Keeping every node ever
       // made would grow for as long as somebody is being alarmed.
       this.nodes = [];
+      // The switch is read every cycle, not once at the start, so turning the
+      // sound off mid-ring actually stops it.
+      if (!soundEnabled()) {
+        this.buzz = window.setTimeout(() => vibrate(Array.from({ length: CYCLE * 10 }, (_, i) => (i % 5 < 3 ? 200 : 0))), 0);
+        return;
+      }
+      if (ctx.state === "suspended") void ctx.resume();
       const now = ctx.currentTime + 0.05;
       for (const p of PULSE) {
         const at = now + p.at;

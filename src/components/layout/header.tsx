@@ -67,10 +67,10 @@ export function Header({
   const { search, setSearch, setEditMode } = useScheduleContext();
   const { session, signOut } = useAuth();
   const { data: lectures } = useList("Lecture", "-created_date", 300);
-  const {
-    permission,
-    requestPermission: onRequest,
-  } = useNotifications(lectures ?? [], nowCairo());
+  const { permission, enabled, toggle } = useNotifications(
+    lectures ?? [],
+    nowCairo(),
+  );
   const [now, setNow] = useState(() => nowCairo());
   const [term, setTerm] = useState(search);
 
@@ -182,14 +182,20 @@ export function Header({
             variant="ghost"
             size="icon"
             aria-label={tr("التنبيهات", "Notifications")}
-            onClick={() =>
-              permission === "granted" ? undefined : onRequest()
+            aria-pressed={enabled}
+            title={
+              enabled
+                ? tr("الإشعارات شغالة", "Notifications are on")
+                : tr("الإشعارات مقفولة", "Notifications are off")
             }
+            onClick={toggle}
             className={
-              permission === "granted" ? "text-emerald-600" : undefined
+              enabled && permission === "granted"
+                ? "text-emerald-600"
+                : undefined
             }
           >
-            {permission === "granted" ? (
+            {enabled && permission === "granted" ? (
               <BellRing className="h-4 w-4" />
             ) : (
               <Bell className="h-4 w-4" />

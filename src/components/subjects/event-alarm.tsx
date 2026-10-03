@@ -8,12 +8,9 @@ import { Button } from "@/components/ui/button";
 import { cn, formatTime } from "@/lib/utils";
 import { kindLabel, shortDate } from "@/lib/subject-events";
 import { SNOOZE_MINUTES } from "@/lib/alarm";
-import {
-  previewChime,
-  soundSupported,
-  soundUnlocked,
-  unlockSound,
-} from "@/lib/alarm-sound";
+import { previewChime, soundSupported, unlockSound } from "@/lib/alarm-sound";
+import { setAlarmPref } from "@/lib/alarm-prefs";
+import { useAlarmPrefs } from "@/hooks/use-alarm-prefs";
 import { useEventAlarms } from "@/hooks/use-event-alarms";
 
 /** "in 58 minutes", counting down while it rings. */
@@ -197,33 +194,42 @@ export function EventAlarms() {
 export function AlarmSoundToggle({ className }: { className?: string }) {
   const { tr } = useI18n();
   const toast = useToast();
-  const [unlocked, setUnlocked] = useState(false);
+  const { sound } = useAlarmPrefs();
   const [busy, setBusy] = useState(false);
   const [supported, setSupported] = useState(true);
 
   useEffect(() => {
     setSupported(soundSupported());
-    setUnlocked(soundUnlocked());
   }, []);
 
   if (!supported) return null;
 
-  const label = unlocked
+  const label = sound
     ? tr("صوت المنبه شغال", "Alarm sound is on")
-    : tr("فعّل صوت المنبه", "Turn on alarm sound");
+    : tr("صوت المنبه مقفول", "Alarm sound is off");
 
   return (
     <Button
       variant="ghost"
       size="icon"
       aria-label={label}
+      aria-pressed={sound}
       title={label}
       disabled={busy}
       onClick={async () => {
+        // Off is one press and needs nothing from the browser. On is the press
+        // that must also earn the right to make a sound.
+        if (sound) {
+          setAlarmPref("sound", false);
+          toast({ title: tr("قفلنا صوت المنبه", "Alarm sound is off") });
+          return;
+        }
         setBusy(true);
         const ok = await unlockSound();
-        setUnlocked(ok);
-        if (ok) previewChime();
+        if (ok) {
+          setAlarmPref("sound", true);
+          previewChime();
+        }
         setBusy(false);
         toast(
           ok
@@ -240,7 +246,7 @@ export function AlarmSoundToggle({ className }: { className?: string }) {
       }}
       className={className}
     >
-      {unlocked ? (
+      {sound ? (
         <Volume2 className="h-4 w-4 text-emerald-600" />
       ) : (
         <VolumeX className="h-4 w-4 text-amber-600" />

@@ -26,6 +26,8 @@ import {
   unlockSound,
   vibrate,
 } from "@/lib/alarm-sound";
+import { notificationsEnabled, setAlarmPref, soundEnabled } from "@/lib/alarm-prefs";
+import { useAlarmPrefs } from "@/hooks/use-alarm-prefs";
 
 /**
  * Ringing for an event, and remembering that it already rang.
@@ -48,6 +50,7 @@ const MAX_SLEEP = 15 * 60_000;
 export function useEventAlarms() {
   const { session } = useAuth();
   const who = session?.id ?? "";
+  const prefs = useAlarmPrefs();
   // Only from today onwards. An alarm is never about a week that has already
   // happened, and asking for everything means that one person with a long
   // history fills the list with the past and quietly loses the next exam.
@@ -99,6 +102,23 @@ export function useEventAlarms() {
 
   useEffect(() => {
     setUnlocked(soundUnlocked());
+    // The switch survived the reload, but a browser still wants a gesture before
+    // it makes noise. The first touch anywhere on the page is that gesture, so
+    // an alarm turned on last time is heard this time without being re-asked.
+    if (!soundEnabled()) return;
+    const once = () => {
+      void unlockSound().then((ok) => {
+        if (ok) setUnlocked(true);
+      });
+      window.removeEventListener("pointerdown", once);
+      window.removeEventListener("keydown", once);
+    };
+    window.addEventListener("pointerdown", once);
+    window.addEventListener("keydown", once);
+    return () => {
+      window.removeEventListener("pointerdown", once);
+      window.removeEventListener("keydown", once);
+    };
   }, []);
 
   useEffect(() => {
@@ -118,7 +138,11 @@ export function useEventAlarms() {
       alarm.current?.start();
       vibrate([400, 150, 400]);
       try {
-        if ("Notification" in window && Notification.permission === "granted") {
+        if (
+          notificationsEnabled() &&
+          "Notification" in window &&
+          Notification.permission === "granted"
+        ) {
           new Notification(next.title, {
             body: [next.subject_key, next.start_time].filter(Boolean).join(" · "),
             tag: alarmKey(next),
@@ -176,8 +200,11 @@ export function useEventAlarms() {
   /** The tap that lets a browser make a sound at all. */
   const enableSound = useCallback(async () => {
     const ok = await unlockSound();
+    if (ok) {
+      setAlarmPref("sound", true);
+      previewChime();
+    }
     setUnlocked(ok);
-    if (ok) previewChime();
     return ok;
   }, []);
 
@@ -186,7 +213,8 @@ export function useEventAlarms() {
     stop,
     snooze,
     enableSound,
-    unlocked,
+    /** Sound is only "on" when the switch is on and the browser permits it. */
+    unlocked: prefs.sound && unlocked,
     supported: soundSupported(),
     /** Sampled now, for a countdown that moves without re-rendering the app. */
     now: useMemo(() => new Date(clock), [clock]),
