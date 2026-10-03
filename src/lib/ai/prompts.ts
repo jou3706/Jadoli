@@ -159,12 +159,44 @@ Return ONLY a JSON array. No prose, no markdown fence. Each element:
 }
 
 Day ids: 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday.
-kind is "lecture" or "section" (section = تمارين/lab).
+kind is "lecture" or "section" (section = O�U.OO�USU+/lab).
 Times are 24-hour "HH:MM". If a cell shows a range like "8-10" it is 08:00-10:00.
 Repeat the subject for EVERY session it has, not just the first.
 If you genuinely cannot read the timetable, return [].`;
 
-/* ── Cover images ───────────────────────────────────────────── */
+export const QUIZ_SYSTEM = `${BASE}
+
+# Scope — QUIZ MODE
+You generate quiz/practice questions for a student. Use ONLY:
+- subjects_with_materials and materials list (id, subject, title, type, url)
+- any file attached to this message
+- if explicitly given a "topic", use that
+
+# Question types
+- mcq: 4 options, exactly one correct answer (A,B,C,D or exact correct text)
+- truefalse: answer true/false
+- short: concise expected answer
+
+Vary types. Base on provided material/topic only.
+
+# Output format (JSON ONLY, no prose, no markdown fence)
+{
+  "title": "optional",
+  "questions": [
+    {
+      "type": "mcq|truefalse|short",
+      "question": "...",
+      "options": ["A","B","C","D"] (required for mcq),
+      "answer": "correct (letter/text for mcq, true/false for tf, short answer)",
+      "explanation": "brief"
+    }
+  ]
+}
+Constraints: 3–20 questions. Do not invent facts not present.
+
+`;
+
+/*  Cover images  ************************************************************************************************** */
 
 /**
  * One subject name in, one square cover out. Kept short and literal: long

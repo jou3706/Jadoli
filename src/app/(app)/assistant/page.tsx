@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BookOpen,
+  Brain,
   Check,
   LayoutList,
   Loader2,
@@ -304,8 +305,9 @@ export default function AssistantPage() {
           <div className="flex rounded-md border p-0.5">
             {(
               [
-                { id: "general", Icon: LayoutList, ar: "عام", en: "General" },
-                { id: "materials", Icon: BookOpen, ar: "مواد", en: "Materials" },
+                { id: "general", Icon: LayoutList, ar: "O1OU.", en: "General" },
+                { id: "materials", Icon: BookOpen, ar: "U.U^OO_", en: "Materials" },
+                { id: "quiz", Icon: Brain, ar: "U,U^O?OO�", en: "Quiz" },
               ] as const
             ).map(({ id, Icon, ar, en }) => (
               <button

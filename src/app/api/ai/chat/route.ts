@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { chatBodySchema } from "@/lib/ai/schema";
 import { streamChat } from "@/lib/ai/providers";
-import { ASSISTANT_SYSTEM, MATERIALS_SYSTEM } from "@/lib/ai/prompts";
+import { ASSISTANT_SYSTEM, MATERIALS_SYSTEM, QUIZ_SYSTEM } from "@/lib/ai/prompts";
 import { describePools, hasKeys, totalKeys } from "@/lib/ai/keys";
 import type { ModelId } from "@/lib/ai/models";
 
@@ -38,7 +38,12 @@ export async function POST(req: Request) {
 
   // The mode picks the instructions here on the server; the browser cannot
   // choose its own prompt.
-  const system = mode === "materials" ? MATERIALS_SYSTEM : ASSISTANT_SYSTEM;
+  const system =
+    mode === "quiz"
+      ? QUIZ_SYSTEM
+      : mode === "materials"
+        ? MATERIALS_SYSTEM
+        : ASSISTANT_SYSTEM;
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({

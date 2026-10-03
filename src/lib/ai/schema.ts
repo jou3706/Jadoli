@@ -20,7 +20,7 @@ export const attachmentKind = (mime: string) =>
   mime === "application/pdf" ? "pdf" : "image";
 
 /** Which slice of the student's data the assistant is allowed to use. */
-export const ASSISTANT_MODES = ["general", "materials"] as const;
+export const ASSISTANT_MODES = ["general", "materials", "quiz"] as const;
 export type AssistantMode = (typeof ASSISTANT_MODES)[number];
 
 export const chatBodySchema = z.object({
@@ -47,14 +47,68 @@ export const importBodySchema = z.object({
 export const MAX_NOTE_CHARS = 12_000;
 
 /**
+ * Quiz generation: source of content for generating questions.
+ */
+export const quizSourceSchema = z
+  .object({
+    subjectKey: z.string().trim().min(1),
+    source: z.enum(["material", "chapter", "topic"]).default("material"),
+    materialId: z.string().uuid().optional(),
+    materialTitle: z.string().trim().optional(),
+    materialFilePath: z.string().trim().optional(),
+    chapter: z.string().trim().optional(),
+    topic: z.string().trim().min(1).optional(),
+    count: z.number().int().min(3).max(20).default(10),
+    language: z.enum(["ar", "en"]).default("ar"),
+  })
+  .superRefine((v, ctx) => {
+    if (v.source === "material") {
+      if (!v.materialId) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "material required", path: ["materialId"] });
+      }
+    }
+    if (v.source === "chapter") {
+      if (!v.chapter || v.chapter.length < 1) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "chapter required", path: ["chapter"] });
+      }
+    }
+    if (v.source === "topic") {
+      if (!v.topic || v.topic.length < 1) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "topic required", path: ["topic"] });
+      }
+    }
+  });
+
+export type QuizSource = z.infer<typeof quizSourceSchema>;
+
+/**
+ * Quiz question types
+ */
+export const quizQuestionSchema = z.object({
+  type: z.enum(["mcq", "truefalse", "short"]).default("mcq"),
+  question: z.string().min(1),
+  options: z.array(z.string()).optional(),
+  answer: z.string().min(1),
+  explanation: z.string().optional(),
+});
+
+export const quizSetSchema = z.object({
+  title: z.string().optional(),
+  questions: z.array(quizQuestionSchema).min(1).max(30),
+});
+
+export type QuizQuestion = z.infer<typeof quizQuestionSchema>;
+export type QuizSet = z.infer<typeof quizSetSchema>;
+
+/**
  * One file to read, named so the model can be told which question came from
  * which page.
  *
  * A `file_path` and not the bytes. The deployment caps a request body at 4.5 MB,
  * and base64 makes a file a third bigger, so a lecture PDF sent from the browser
  * is refused before the model is ever reached - by the platform, with an
- * unparseable body that looks like the app simply failing. The route reads the
- * file itself and the browser sends a reference.
+ * error that arrives as plain text, which the dialog now reads as text rather
+ * than assuming JSON.
  */
 export const materialRef = z.object({
   id: z.string().min(1).max(64),

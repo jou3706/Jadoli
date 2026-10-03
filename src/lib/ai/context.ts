@@ -40,6 +40,36 @@ function courseList(lectures: Lecture[], materials: Material[]): string[] {
 export function buildContext(data: StudentData): string {
   const { lectures, grades, events, materials, now, lang, mode } = data;
 
+  // Quiz mode: provide subjects and materials organized by subject
+  if (mode === "quiz") {
+    const L: string[] = [nowLine(now), "", "mode: quiz"];
+    const by = new Map<string, Material[]>();
+    for (const m of materials) {
+      const k = (m.subject_key || "").trim();
+      if (!k) continue;
+      const lst = by.get(k) ?? [];
+      lst.push(m);
+      by.set(k, lst);
+    }
+    L.push("", "subjects_with_materials:");
+    if (by.size) {
+      for (const [sk, lst] of by) {
+        L.push("- " + sk + " (" + lst.length + ")");
+      }
+    } else {
+      L.push("(none)");
+    }
+    L.push("", "materials:");
+    if (materials.length) {
+      for (const m of materials) {
+        L.push("- id=" + m.id + " | subject=" + (m.subject_key || "(unassigned)") + " | title=" + m.title + " | type=" + (m.type || "unknown") + " | url=" + m.url);
+      }
+    } else {
+      L.push("(none saved yet)");
+    }
+    return L.join("\n");
+  }
+
   // Materials mode: the timetable, grades and events are not injected at all,
   // so the model cannot answer from them even if the student insists.
   if (mode === "materials") {
