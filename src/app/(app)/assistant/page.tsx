@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { useList } from "@/lib/db/store";
+import { authHeader } from "@/lib/db/supabase-client";
 import { useChats } from "@/hooks/use-chats";
 import { applyActions } from "@/lib/ai/apply-actions";
 import { buildContext, withContext } from "@/lib/ai/context";
@@ -297,12 +298,14 @@ export default function AssistantPage() {
       if (quizReq) {
         const qres = await fetch("/api/ai/quiz", {
           method: "POST",
-          headers: { "content-type": "application/json" },
+          headers: { "content-type": "application/json", ...(await authHeader()) },
           body: JSON.stringify(quizReq),
           signal: ac.signal,
         });
         const qdata = await qres.json().catch(() => ({}));
-        if (!qres.ok) throw new Error(String(qdata.error ?? "quiz generation failed"));
+        if (!qres.ok) {
+          throw new Error(String(qdata.message ?? qdata.reason ?? qdata.error ?? "quiz generation failed"));
+        }
         quizSet = qdata as QuizSet;
       }
       // The model sometimes writes the quiz itself instead of the action block.

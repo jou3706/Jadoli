@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useList } from "@/lib/db/store";
+import { authHeader } from "@/lib/db/supabase-client";
 import { QuizBuilder } from "@/components/ai/quiz-builder";
 import { QuizSession } from "@/components/review/quiz-session";
 import type { QuizSet, QuizSource } from "@/lib/ai/schema";
@@ -26,11 +27,11 @@ export default function QuizPage() {
     try {
       const res = await fetch("/api/ai/quiz", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...(await authHeader()) },
         body: JSON.stringify(src),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || "generation failed");
+      if (!res.ok) throw new Error(data.message || data.reason || data.error || "generation failed");
       setQuiz(data);
     } catch (e) {
       setErr((e as Error).message);

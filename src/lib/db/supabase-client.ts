@@ -23,3 +23,20 @@ export function getSupabase(): SupabaseClient | null {
   });
   return client;
 }
+
+/**
+ * The signed-in student's token, for a server route to read their own stored
+ * files with. Empty when the app runs local-first, which is also when there is
+ * no bucket and therefore no uploaded file to read.
+ */
+export async function authHeader(): Promise<Record<string, string>> {
+  const sb = getSupabase();
+  if (!sb) return {};
+  try {
+    const { data } = await sb.auth.getSession();
+    const token = data.session?.access_token;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  } catch {
+    return {};
+  }
+}

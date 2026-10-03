@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { completeJson } from "@/lib/ai/providers";
 import { buildQuizPrompt } from "@/lib/ai/prompts";
 import { quizSetSchema, quizSourceSchema } from "@/lib/ai/schema";
-import { loadMaterials } from "@/lib/ai/material-fetch";
+import { loadMaterials, skipReason } from "@/lib/ai/material-fetch";
 import type { ModelId } from "@/lib/ai/models";
 
 export const runtime = "nodejs";
@@ -35,7 +35,14 @@ export async function POST(req: Request) {
 
   if (loaded && loaded.materials.length === 0 && loaded.skipped.length > 0) {
     const s = loaded.skipped[0];
-    return NextResponse.json({ error: `MATERIALS_UNREADABLE:${s.id}`, reason: s.reason }, { status: 422 });
+    return NextResponse.json(
+      {
+        error: `MATERIALS_UNREADABLE:${s.id}`,
+        reason: s.reason,
+        message: skipReason(s.reason, src.language),
+      },
+      { status: 422 },
+    );
   }
 
   const parts: string[] = [];
