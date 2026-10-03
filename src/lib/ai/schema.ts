@@ -46,36 +46,39 @@ export const importBodySchema = z.object({
  */
 export const MAX_NOTE_CHARS = 12_000;
 
+/** Mirrors `MAX_CARDABLE_MATERIALS` in `lib/material-cards`. */
+export const MAX_MATERIAL_PARTS = 6;
+
 /**
- * Quiz generation: source of content for generating questions.
+ * Quiz generation: where the questions come from.
+ *
+ * `materialIds` is a list, not a single id: the student picks every file of the
+ * course they want the exam drawn from, and the route reads them all server-side.
  */
 export const quizSourceSchema = z
   .object({
     subjectKey: z.string().trim().min(1),
     source: z.enum(["material", "chapter", "topic"]).default("material"),
-    materialId: z.string().uuid().optional(),
-    materialTitle: z.string().trim().optional(),
-    materialFilePath: z.string().trim().optional(),
-    chapter: z.string().trim().optional(),
+    /** Saved materials to read; one or more. */
+    materialIds: z.array(z.string().min(1).max(64)).max(MAX_MATERIAL_PARTS).default([]),
+    chapter: z.string().trim().min(1).optional(),
     topic: z.string().trim().min(1).optional(),
     count: z.number().int().min(3).max(20).default(10),
     language: z.enum(["ar", "en"]).default("ar"),
   })
   .superRefine((v, ctx) => {
-    if (v.source === "material") {
-      if (!v.materialId) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "material required", path: ["materialId"] });
-      }
+    if (v.source === "material" && v.materialIds.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "choose at least one material",
+        path: ["materialIds"],
+      });
     }
-    if (v.source === "chapter") {
-      if (!v.chapter || v.chapter.length < 1) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "chapter required", path: ["chapter"] });
-      }
+    if (v.source === "chapter" && !v.chapter) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "chapter required", path: ["chapter"] });
     }
-    if (v.source === "topic") {
-      if (!v.topic || v.topic.length < 1) {
-        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "topic required", path: ["topic"] });
-      }
+    if (v.source === "topic" && !v.topic) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: "topic required", path: ["topic"] });
     }
   });
 
@@ -158,9 +161,6 @@ export const materialRef = z.object({
   file_path: z.string().max(300).default(""),
   title: z.string().max(200).default(""),
 });
-
-/** Mirrors `MAX_CARDABLE_MATERIALS` in `lib/material-cards`. */
-export const MAX_MATERIAL_PARTS = 6;
 
 export const flashcardsBodySchema = z
   .object({

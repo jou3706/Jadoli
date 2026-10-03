@@ -204,6 +204,34 @@ create table if not exists public.review_sessions (
 create index if not exists review_sessions_user_date_idx
   on public.review_sessions (user_id, date);
 
+-- ── Question bank ─────────────────────────────────────────────────────────
+-- Every question the app has shown the student, so an exam is remembered and the
+-- same question is never stored twice. See 08-questions.sql for the deployed
+-- version.
+
+create table if not exists public.questions (
+  id            uuid primary key default gen_random_uuid(),
+  user_id       uuid not null references auth.users on delete cascade,
+  subject_key   text not null default '',
+  question      text not null default '',
+  type          text not null default 'mcq'
+                  check (type in ('mcq','truefalse','short')),
+  options       jsonb not null default '[]'::jsonb,
+  answer        text not null default '',
+  explanation   text not null default '',
+  source        text not null default '',
+  created_date  timestamptz not null default now(),
+  updated_date  timestamptz not null default now()
+);
+
+create index if not exists questions_user_subject_idx
+  on public.questions (user_id, subject_key);
+
+-- One course plus one question is one question: regenerating an exam should not
+-- double the bank, and the index makes that true at the database as well.
+create unique index if not exists questions_user_subject_question_key
+  on public.questions (user_id, lower(btrim(subject_key)), lower(btrim(question)));
+
 create table if not exists public.chats (
   id            uuid primary key default gen_random_uuid(),
   user_id       uuid not null references auth.users on delete cascade,
@@ -250,7 +278,7 @@ begin
   foreach t in array array[
     'lectures','attendance','grades','halls','materials','subjects',
     'subject_events','university_events','flashcards','review_sessions',
-    'chats','messages'
+    'questions','chats','messages'
   ]
   loop
     execute format('drop trigger if exists %I_set_updated_date on public.%I', t, t);
@@ -276,6 +304,7 @@ alter table public.subject_events    enable row level security;
 alter table public.university_events enable row level security;
 alter table public.flashcards        enable row level security;
 alter table public.review_sessions   enable row level security;
+alter table public.questions         enable row level security;
 alter table public.chats             enable row level security;
 alter table public.messages          enable row level security;
 
@@ -286,7 +315,7 @@ begin
   foreach t in array array[
     'lectures','attendance','grades','halls','materials','subjects',
     'subject_events','university_events','flashcards','review_sessions',
-    'chats','messages'
+    'questions','chats','messages'
   ]
   loop
     execute format('drop policy if exists %I on public.%I', t || '_own', t);

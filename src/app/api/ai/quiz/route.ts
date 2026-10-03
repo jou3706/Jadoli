@@ -29,10 +29,16 @@ export async function POST(req: Request) {
   req.signal.addEventListener("abort", () => ac.abort(), { once: true });
 
   let loaded: Awaited<ReturnType<typeof loadMaterials>> | null = null;
-  if (src.source === "material" && src.materialId) {
-    loaded = await loadMaterials(req, [{ id: src.materialId, title: src.materialTitle || "" }], ac.signal);
+  if (src.source === "material" && src.materialIds.length) {
+    loaded = await loadMaterials(
+      req,
+      src.materialIds.map((id) => ({ id, title: "" })),
+      ac.signal,
+    );
   }
 
+  // Nothing loaded and something was asked for: the student is owed the reason,
+  // not an empty exam.
   if (loaded && loaded.materials.length === 0 && loaded.skipped.length > 0) {
     const s = loaded.skipped[0];
     return NextResponse.json(
@@ -44,6 +50,8 @@ export async function POST(req: Request) {
       { status: 422 },
     );
   }
+
+  const attached = loaded?.materials ?? [];
 
   const parts: string[] = [];
   parts.push(`language: ${src.language}`);
@@ -57,8 +65,11 @@ export async function POST(req: Request) {
   if (src.subjectKey) {
     parts.push(`subject: ${src.subjectKey}`);
   }
-  if (src.source === "material" && src.materialTitle) {
-    parts.push(`material_title: ${src.materialTitle}`);
+  // Naming each file tells the model which attachment is which, the same way the
+  // flashcards route does.
+  if (attached.length) {
+    parts.push(`material_count: ${attached.length}`);
+    attached.forEach((m, i) => parts.push(`material ${i + 1}: ${m.title || "material"}`));
   }
 
   const user = parts.join("\n");
@@ -68,7 +79,7 @@ export async function POST(req: Request) {
       "gemini-35-flash" as ModelId,
       buildQuizPrompt(src.language),
       user,
-      undefined,
+      attached.length ? attached.map((m) => ({ dataUrl: m.dataUrl, mime: m.mime })) : undefined,
       ac.signal,
     );
     const parsed = quizSetSchema.safeParse(JSON.parse(raw));

@@ -33,6 +33,7 @@ Subject: "subjects",
   UniversityEvent: "university_events",
   Flashcard: "flashcards",
   ReviewSession: "review_sessions",
+  Question: "questions",
   Chat: "chats",
   Message: "messages",
 };

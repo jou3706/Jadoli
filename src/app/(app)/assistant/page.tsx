@@ -17,12 +17,20 @@ import {
   X,
 } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
-import { useList } from "@/lib/db/store";
+import { useList, useMutate } from "@/lib/db/store";
 import { authHeader } from "@/lib/db/supabase-client";
 import { useChats } from "@/hooks/use-chats";
 import { applyActions } from "@/lib/ai/apply-actions";
 import { buildContext, withContext } from "@/lib/ai/context";
-import { splitAction, parseQuiz, type AssistantMode, type QuizSet } from "@/lib/ai/schema";
+import {
+  splitAction,
+  parseQuiz,
+  type AssistantMode,
+  type QuizSet,
+  type QuizSource,
+} from "@/lib/ai/schema";
+import { newQuestions, questionPayload } from "@/lib/quiz-bank";
+import { QuizBuilder } from "@/components/ai/quiz-builder";
 import { QuizSession } from "@/components/review/quiz-session";
 import { MODELS, findModel } from "@/lib/ai/models";
 import { nowCairo } from "@/lib/utils";
@@ -50,14 +58,14 @@ type Turn = {
   images?: Attachment[];
   applied?: { ok: boolean; label: string }[];
   quiz?: QuizSet;
+  /** Set while the student is choosing which files the exam is made from. */
+  quizOffer?: { subjectKey?: string; topic?: string };
   error?: string;
 };
 
 type QuizRequest = {
   subjectKey?: string;
   source?: string;
-  materialId?: string;
-  materialTitle?: string;
   chapter?: string;
   topic?: string;
   count?: number;
@@ -79,6 +87,11 @@ export default function AssistantPage() {
   const { data: grades = [] } = useList("Grade");
   const { data: events = [] } = useList("UniversityEvent", "date", 300);
   const { data: materials = [] } = useList("Material", "-created_date", 100);
+  // The picker needs every material of the chosen course, not just the newest
+  // hundred the context happens to carry.
+  const { data: pickerMaterials = [] } = useList("Material", "-created_date", 500);
+  const { data: bank = [] } = useList("Question", "-created_date", 1000);
+  const { bulkCreate } = useMutate("Question");
 
   const [model, setModel] = useState("gemini-35-flash");
   const [mode, setMode] = useState<AssistantMode>("general");
@@ -86,6 +99,7 @@ export default function AssistantPage() {
   const [input, setInput] = useState("");
   const [images, setImages] = useState<Attachment[]>([]);
   const [busy, setBusy] = useState(false);
+  const [quizBusy, setQuizBusy] = useState(false);
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [totalKeys, setTotalKeys] = useState(0);
   const [showChats, setShowChats] = useState(false);
@@ -98,6 +112,67 @@ export default function AssistantPage() {
   // In-flight turns carry the streaming text and the applied-action badges;
   // everything else is rendered from the persisted thread.
   const turns: Turn[] = streamed ?? chats.turns;
+
+  const pickerSubjects = useMemo(() => {
+    const s = new Set<string>();
+    for (const l of lectures) if (l.subject_name) s.add(l.subject_name.trim());
+    for (const m of pickerMaterials) if (m.subject_key) s.add(m.subject_key.trim());
+    return Array.from(s).sort();
+  }, [lectures, pickerMaterials]);
+
+  const patchTurn = (id: string, next: Partial<Turn>) =>
+    setStreamed((p) => (p ? p.map((t) => (t.id === id ? { ...t, ...next } : t)) : p));
+
+  /**
+   * Builds an exam from the files the student picked, saves whatever is new to
+   * the question bank, and turns the offer block into the interactive exam.
+   */
+  const runQuiz = async (source: QuizSource, turnId: string) => {
+    setQuizBusy(true);
+    patchTurn(turnId, { error: undefined });
+    try {
+      const res = await fetch("/api/ai/quiz", {
+        method: "POST",
+        headers: { "content-type": "application/json", ...(await authHeader()) },
+        body: JSON.stringify(source),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(String(data.message ?? data.reason ?? data.error ?? "quiz generation failed"));
+      }
+      const set = data as QuizSet;
+      const fresh = newQuestions(set.questions, bank, source.subjectKey);
+      if (fresh.length) {
+        const picked = source.materialIds
+          .map((id) => pickerMaterials.find((m) => m.id === id)?.title ?? "")
+          .filter(Boolean);
+        const label =
+          source.source === "chapter"
+            ? `فصل: ${source.chapter ?? ""}`
+            : source.source === "topic"
+              ? source.topic ?? ""
+              : picked.join("، ");
+        try {
+          await bulkCreate(
+            fresh.map((q) => questionPayload(q, { subjectKey: source.subjectKey, source: label })),
+          );
+        } catch {
+          /* already saved — the unique index refused a duplicate */
+        }
+      }
+      patchTurn(turnId, { quizOffer: undefined, quiz: set });
+      if (chats.activeId) {
+        await chats
+          .saveMessage(chats.activeId, "assistant", tr("اختبار تفاعلي", "Interactive quiz"))
+          .catch(() => {});
+      }
+    } catch (e) {
+      // Keep the offer on screen so a failed generation can be tried again.
+      patchTurn(turnId, { error: (e as Error).message });
+    } finally {
+      setQuizBusy(false);
+    }
+  };
 
   const def = findModel(model);
   const canAttach = def.supportsImages || def.supportsPdf === true;
@@ -234,10 +309,7 @@ export default function AssistantPage() {
     const ac = new AbortController();
     abortRef.current = ac;
 
-    const patch = (next: Partial<Turn>) =>
-      setStreamed((p) =>
-        p ? p.map((t) => (t.id === assistantId ? { ...t, ...next } : t)) : p,
-      );
+    const patch = (next: Partial<Turn>) => patchTurn(assistantId, next);
 
     try {
       const res = await fetch("/api/ai/chat", {
@@ -294,23 +366,22 @@ export default function AssistantPage() {
       const dbActions = quizReq ? actions.filter((a) => !asQuizAction(a)) : actions;
       const applied = dbActions.length ? await applyActions(dbActions, mode) : undefined;
 
-      let quizSet: QuizSet | null = null;
+      // The subject is known: hand it to the picker so the student chooses the
+      // files and the count, rather than generating from the model's guess.
       if (quizReq) {
-        const qres = await fetch("/api/ai/quiz", {
-          method: "POST",
-          headers: { "content-type": "application/json", ...(await authHeader()) },
-          body: JSON.stringify(quizReq),
-          signal: ac.signal,
+        patch({
+          text: visible,
+          applied,
+          quizOffer: { subjectKey: quizReq.subjectKey, topic: quizReq.topic },
         });
-        const qdata = await qres.json().catch(() => ({}));
-        if (!qres.ok) {
-          throw new Error(String(qdata.message ?? qdata.reason ?? qdata.error ?? "quiz generation failed"));
+        if (chatId && visible.trim()) {
+          await chats.saveMessage(chatId, "assistant", visible).catch(() => {});
         }
-        quizSet = qdata as QuizSet;
+        return;
       }
-      // The model sometimes writes the quiz itself instead of the action block.
-      if (!quizSet && mode === "quiz") quizSet = parseQuiz(visible);
 
+      // The model sometimes writes the quiz itself instead of the action block.
+      const quizSet = mode === "quiz" ? parseQuiz(visible) : null;
       patch({ text: quizSet ? "" : visible, applied, quiz: quizSet ?? undefined });
       // Save a short marker rather than the action JSON the model appended.
       const savedText = quizSet ? tr("اختبار تفاعلي", "Interactive quiz") : visible;
@@ -560,6 +631,27 @@ export default function AssistantPage() {
                   )
                 }
               />
+            ) : t.quizOffer ? (
+              <div className="space-y-2">
+                {t.text && (
+                  <p className="rounded-2xl rounded-es-sm bg-muted px-3 py-2 text-sm leading-relaxed whitespace-pre-wrap">
+                    {t.text}
+                  </p>
+                )}
+                <QuizBuilder
+                  subjects={pickerSubjects}
+                  materials={pickerMaterials}
+                  defaultSubject={t.quizOffer.subjectKey}
+                  defaultTopic={t.quizOffer.topic}
+                  busy={quizBusy}
+                  onGenerate={(src) => runQuiz(src, t.id)}
+                />
+                {t.error && (
+                  <p className="text-sm text-destructive">
+                    {tr("خطأ:", "Error:")} {t.error}
+                  </p>
+                )}
+              </div>
             ) : (
             <div
               className={

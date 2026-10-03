@@ -37,6 +37,7 @@ const TABLE_OF: Record<string, string> = {
   UniversityEvent: "university_events",
   Flashcard: "flashcards",
   ReviewSession: "review_sessions",
+  Question: "questions",
   Chat: "chats",
   Message: "messages",
 };
@@ -53,6 +54,7 @@ const CLIENT_ENTITIES = [
   "UniversityEvent",
   "Flashcard",
   "ReviewSession",
+  "Question",
   "Chat",
   "Message",
 ];
@@ -219,6 +221,7 @@ test("every migration is safe to run twice", async () => {
     "../supabase/05-subject-events.sql",
     "../supabase/06-flashcards-and-review.sql",
     "../supabase/07-updated-date.sql",
+    "../supabase/08-questions.sql",
   ];
   for (const rel of files) {
     const text = await read(new URL(rel, import.meta.url));

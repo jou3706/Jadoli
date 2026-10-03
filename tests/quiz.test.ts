@@ -53,7 +53,7 @@ test("parseQuiz returns null for a clarifying question, not a quiz", () => {
   assert.equal(parseQuiz("أي مادة تحب أن أختبرك فيها؟"), null);
 });
 
-test("a material quiz needs a material id", () => {
+test("a material quiz needs at least one material", () => {
   const r = quizSourceSchema.safeParse({ subjectKey: "OS", source: "material" });
   assert.equal(r.success, false);
 });
@@ -67,9 +67,28 @@ test("a well-formed material quiz passes", () => {
   const r = quizSourceSchema.safeParse({
     subjectKey: "OS",
     source: "material",
-    materialId: "2f1b0e5a-1111-4222-8333-444455556666",
+    materialIds: ["2f1b0e5a-1111-4222-8333-444455556666"],
     count: 5,
     language: "ar",
   });
   assert.equal(r.success, true);
+});
+
+test("a quiz can be built from several materials at once", () => {
+  const r = quizSourceSchema.safeParse({
+    subjectKey: "OS",
+    source: "material",
+    materialIds: ["a", "b", "c"],
+  });
+  assert.equal(r.success, true);
+  assert.equal(r.data?.materialIds.length, 3);
+});
+
+test("more than six materials is refused", () => {
+  const r = quizSourceSchema.safeParse({
+    subjectKey: "OS",
+    source: "material",
+    materialIds: ["a", "b", "c", "d", "e", "f", "g"],
+  });
+  assert.equal(r.success, false);
 });

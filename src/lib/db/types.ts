@@ -167,6 +167,27 @@ export type ReviewSession = {
   created_date: string;
 };
 
+/**
+ * A question kept in the student's bank.
+ *
+ * A question generated for an exam is saved here the moment it is shown, so the
+ * same one is never written twice and an exam can be re-read later without asking
+ * the model for it again. Keyed to the course by name, the way `Flashcard` is.
+ */
+export type Question = {
+  id: Id;
+  subject_key: string;
+  question: string;
+  type: "mcq" | "truefalse" | "short";
+  /** The choices for an mcq; empty for the other types. */
+  options: string[];
+  answer: string;
+  explanation: string;
+  /** Where it came from — the material title, chapter or topic. */
+  source: string;
+  created_date: string;
+};
+
 export type Chat = {
   id: Id;
   title: string;
@@ -198,6 +219,7 @@ export type EntityMap = {
   UniversityEvent: UniversityEvent;
   Flashcard: Flashcard;
   ReviewSession: ReviewSession;
+  Question: Question;
   Chat: Chat;
   Message: Message;
 };
@@ -215,6 +237,7 @@ export const ENTITY_NAMES: EntityName[] = [
   "UniversityEvent",
   "Flashcard",
   "ReviewSession",
+  "Question",
   "Chat",
   "Message",
 ];
