@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -83,7 +83,7 @@ export default function AssistantPage() {
   // A different thread means a different history.
   //
   // Sending in a brand-new chat also changes activeId (the chat is created
-  // mid-send), and that must NOT wipe the turn it just rendered — so the send
+  // mid-send), and that must NOT wipe the turn it just rendered â€” so the send
   // marks itself and this effect skips that one change.
   useEffect(() => {
     if (creatingRef.current) {
@@ -157,7 +157,7 @@ export default function AssistantPage() {
       if (isPdf && !def.supportsPdf) {
         toast({
           title: tr(
-            "الموديل ده مش بيقرأ PDF",
+            "Ø§Ù„Ù…ÙˆØ¯ÙŠÙ„ Ø¯Ù‡ Ù…Ø´ Ø¨ÙŠÙ‚Ø±Ø£ PDF",
             "That model cannot read PDFs",
           ),
           variant: "destructive",
@@ -167,7 +167,7 @@ export default function AssistantPage() {
       if (f.size > (isPdf ? MAX_PDF_BYTES : MAX_IMAGE_BYTES)) {
         toast({
           title: tr(
-            "الملف كبير أوي",
+            "Ø§Ù„Ù…Ù„Ù ÙƒØ¨ÙŠØ± Ø£ÙˆÙŠ",
             "That file is too large",
           ),
           variant: "destructive",
@@ -291,23 +291,23 @@ export default function AssistantPage() {
           variant="outline"
           className="h-9 w-9"
           onClick={() => setShowChats((v) => !v)}
-          aria-label={tr("المحادثات", "Conversations")}
+          aria-label={tr("Ø§Ù„Ù…Ø­Ø§Ø¯Ø«Ø§Øª", "Conversations")}
           aria-expanded={showChats}
         >
           <MessagesSquare className="h-4 w-4" />
         </Button>
-        <h1 className="font-display text-2xl font-bold">{tr("المساعد", "Assistant")}</h1>
+        <h1 className="font-display text-2xl font-bold">{tr("Ø§Ù„Ù…Ø³Ø§Ø¹Ø¯", "Assistant")}</h1>
         <div
           className="ms-auto flex items-center gap-2"
           role="group"
-          aria-label={tr("وضع المساعد", "Assistant mode")}
+          aria-label={tr("ÙˆØ¶Ø¹ Ø§Ù„Ù…Ø³Ø§Ø¹Ø¯", "Assistant mode")}
         >
           <div className="flex rounded-md border p-0.5">
             {(
               [
-                { id: "general", Icon: LayoutList, ar: "O1OU.", en: "General" },
-                { id: "materials", Icon: BookOpen, ar: "U.U^OO_", en: "Materials" },
-                { id: "quiz", Icon: Brain, ar: "U,U^O?OO�", en: "Quiz" },
+                { id: "general", Icon: LayoutList, ar: "عام", en: "General" },
+                { id: "materials", Icon: BookOpen, ar: "المواد", en: "Materials" },
+                { id: "quiz", Icon: Brain, ar: "الاختبارات", en: "Quiz" },
               ] as const
             ).map(({ id, Icon, ar, en }) => (
               <button
@@ -333,7 +333,7 @@ export default function AssistantPage() {
               if (!findModel(e.target.value).supportsImages) setImages([]);
             }}
             className="h-9 rounded-md border bg-background px-2 text-sm"
-            aria-label={tr("اختار الموديل", "Choose model")}
+            aria-label={tr("Ø§Ø®ØªØ§Ø± Ø§Ù„Ù…ÙˆØ¯ÙŠÙ„", "Choose model")}
           >
             {MODELS.filter((m) => m.supportsImages || m.supportsPdf).map((m) => (
               <option key={m.id} value={m.id}>
@@ -347,8 +347,8 @@ export default function AssistantPage() {
       {mode === "materials" && (
         <p className="rounded-lg border border-border bg-muted/40 p-2 text-xs text-muted-foreground">
           {tr(
-            "وضع المواد: المساعد بيجاوب من مذكراتك وملفاتك المرفوعة بس — مش بيشوف الجدول ولا الدرجات. لو لقى لينك مفيد يقدر يحفظه في صفحة المواد.",
-            "Materials mode: the assistant answers from your saved materials and attached files only — it cannot see the timetable or grades. If it finds a useful link it can save it to the materials page.",
+            "ÙˆØ¶Ø¹ Ø§Ù„Ù…ÙˆØ§Ø¯: Ø§Ù„Ù…Ø³Ø§Ø¹Ø¯ Ø¨ÙŠØ¬Ø§ÙˆØ¨ Ù…Ù† Ù…Ø°ÙƒØ±Ø§ØªÙƒ ÙˆÙ…Ù„ÙØ§ØªÙƒ Ø§Ù„Ù…Ø±ÙÙˆØ¹Ø© Ø¨Ø³ â€” Ù…Ø´ Ø¨ÙŠØ´ÙˆÙ Ø§Ù„Ø¬Ø¯ÙˆÙ„ ÙˆÙ„Ø§ Ø§Ù„Ø¯Ø±Ø¬Ø§Øª. Ù„Ùˆ Ù„Ù‚Ù‰ Ù„ÙŠÙ†Ùƒ Ù…ÙÙŠØ¯ ÙŠÙ‚Ø¯Ø± ÙŠØ­ÙØ¸Ù‡ ÙÙŠ ØµÙØ­Ø© Ø§Ù„Ù…ÙˆØ§Ø¯.",
+            "Materials mode: the assistant answers from your saved materials and attached files only â€” it cannot see the timetable or grades. If it finds a useful link it can save it to the materials page.",
           )}
         </p>
       )}
@@ -365,12 +365,12 @@ export default function AssistantPage() {
             }}
           >
             <MessageSquarePlus className="h-4 w-4" />
-            {tr("محادثة جديدة", "New chat")}
+            {tr("Ù…Ø­Ø§Ø¯Ø«Ø© Ø¬Ø¯ÙŠØ¯Ø©", "New chat")}
           </Button>
           {chats.chats.length === 0 ? (
             <p className="px-1 py-2 text-sm text-muted-foreground">
               {tr(
-                "لسه مفيش محادثات محفوظة.",
+                "Ù„Ø³Ù‡ Ù…ÙÙŠØ´ Ù…Ø­Ø§Ø¯Ø«Ø§Øª Ù…Ø­ÙÙˆØ¸Ø©.",
                 "No saved conversations yet.",
               )}
             </p>
@@ -392,14 +392,14 @@ export default function AssistantPage() {
                       chats.openChat(c.id);
                     }}
                   >
-                    {c.title || tr("محادثة بدون عنوان", "Untitled chat")}
+                    {c.title || tr("Ù…Ø­Ø§Ø¯Ø«Ø© Ø¨Ø¯ÙˆÙ† Ø¹Ù†ÙˆØ§Ù†", "Untitled chat")}
                   </button>
                   <button
                     className="shrink-0 rounded p-1 text-muted-foreground hover:text-foreground"
-                    aria-label={tr("غيّر الاسم", "Rename")}
+                    aria-label={tr("ØºÙŠÙ‘Ø± Ø§Ù„Ø§Ø³Ù…", "Rename")}
                     onClick={() => {
                       const next = window.prompt(
-                        tr("اسم المحادثة", "Conversation title"),
+                        tr("Ø§Ø³Ù… Ø§Ù„Ù…Ø­Ø§Ø¯Ø«Ø©", "Conversation title"),
                         c.title,
                       );
                       if (next && next.trim()) void chats.renameChat(c.id, next);
@@ -409,7 +409,7 @@ export default function AssistantPage() {
                   </button>
                   <button
                     className="shrink-0 rounded p-1 text-muted-foreground hover:text-destructive"
-                    aria-label={tr("امسح المحادثة", "Delete chat")}
+                    aria-label={tr("Ø§Ù…Ø³Ø­ Ø§Ù„Ù…Ø­Ø§Ø¯Ø«Ø©", "Delete chat")}
                     onClick={() => {
                       setStreamed(null);
                       void chats.deleteChat(c.id);
@@ -427,8 +427,8 @@ export default function AssistantPage() {
       {configured === false && (
         <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
           {tr(
-            "مفيش مفاتيح API مضبوطة على السيرفر — ضيف GEMINI_API_KEYS في ملف .env.local",
-            "No API keys configured on the server — add GEMINI_API_KEYS to .env.local",
+            "Ù…ÙÙŠØ´ Ù…ÙØ§ØªÙŠØ­ API Ù…Ø¶Ø¨ÙˆØ·Ø© Ø¹Ù„Ù‰ Ø§Ù„Ø³ÙŠØ±ÙØ± â€” Ø¶ÙŠÙ GEMINI_API_KEYS ÙÙŠ Ù…Ù„Ù .env.local",
+            "No API keys configured on the server â€” add GEMINI_API_KEYS to .env.local",
           )}
           {totalKeys > 0 && ` (${totalKeys})`}
         </p>
@@ -443,31 +443,31 @@ export default function AssistantPage() {
             <div>
               <p className="font-display text-xl font-bold">
                 {mode === "materials"
-                  ? tr("اسأل عن مذكراتك", "Ask about your materials")
-                  : tr("اسأل أي حاجة عن جدولك", "Ask anything about your schedule")}
+                  ? tr("Ø§Ø³Ø£Ù„ Ø¹Ù† Ù…Ø°ÙƒØ±Ø§ØªÙƒ", "Ask about your materials")
+                  : tr("Ø§Ø³Ø£Ù„ Ø£ÙŠ Ø­Ø§Ø¬Ø© Ø¹Ù† Ø¬Ø¯ÙˆÙ„Ùƒ", "Ask anything about your schedule")}
               </p>
               <p className="mt-1 text-sm text-muted-foreground">
                 {mode === "materials"
                   ? tr(
-                      "اقرا قائمة مذكراتك، ارفع ملف واسأل عنه، أو ادّيه لينك يحفظهولك.",
+                      "Ø§Ù‚Ø±Ø§ Ù‚Ø§Ø¦Ù…Ø© Ù…Ø°ÙƒØ±Ø§ØªÙƒØŒ Ø§Ø±ÙØ¹ Ù…Ù„Ù ÙˆØ§Ø³Ø£Ù„ Ø¹Ù†Ù‡ØŒ Ø£Ùˆ Ø§Ø¯Ù‘ÙŠÙ‡ Ù„ÙŠÙ†Ùƒ ÙŠØ­ÙØ¸Ù‡ÙˆÙ„Ùƒ.",
                       "Read through your material list, attach a file and ask about it, or hand it a link to save for you.",
                     )
                   : tr(
-                      "المساعد شايف جدولك ودرجاتك ومناسبات الجامعة، ويقدر يضيف محاضرات أو درجات ليك.",
+                      "Ø§Ù„Ù…Ø³Ø§Ø¹Ø¯ Ø´Ø§ÙŠÙ Ø¬Ø¯ÙˆÙ„Ùƒ ÙˆØ¯Ø±Ø¬Ø§ØªÙƒ ÙˆÙ…Ù†Ø§Ø³Ø¨Ø§Øª Ø§Ù„Ø¬Ø§Ù…Ø¹Ø©ØŒ ÙˆÙŠÙ‚Ø¯Ø± ÙŠØ¶ÙŠÙ Ù…Ø­Ø§Ø¶Ø±Ø§Øª Ø£Ùˆ Ø¯Ø±Ø¬Ø§Øª Ù„ÙŠÙƒ.",
                       "The assistant can see your lectures, grades and events, and can add lectures or grades for you.",
                     )}
               </p>
               <div className="mt-3 flex flex-wrap justify-center gap-2">
                 {(mode === "materials"
                   ? [
-                      tr("قائمة مذكراتي", "List my materials"),
-                      tr("عندك مذكرات لمادة إيه؟", "Which courses have materials?"),
-                      tr("احفظ اللينك ده: ...", "Save this link: ..."),
+                      tr("Ù‚Ø§Ø¦Ù…Ø© Ù…Ø°ÙƒØ±Ø§ØªÙŠ", "List my materials"),
+                      tr("Ø¹Ù†Ø¯Ùƒ Ù…Ø°ÙƒØ±Ø§Øª Ù„Ù…Ø§Ø¯Ø© Ø¥ÙŠÙ‡ØŸ", "Which courses have materials?"),
+                      tr("Ø§Ø­ÙØ¸ Ø§Ù„Ù„ÙŠÙ†Ùƒ Ø¯Ù‡: ...", "Save this link: ..."),
                     ]
                   : [
-                      tr("امبارح عندي إيه؟", "What do I have tomorrow?"),
-                      tr("فين المحاضرة الجاية؟", "Where is my next lecture?"),
-                      tr("كم ساعتي في الأسبوع؟", "How many hours this week?"),
+                      tr("Ø§Ù…Ø¨Ø§Ø±Ø­ Ø¹Ù†Ø¯ÙŠ Ø¥ÙŠÙ‡ØŸ", "What do I have tomorrow?"),
+                      tr("ÙÙŠÙ† Ø§Ù„Ù…Ø­Ø§Ø¶Ø±Ø© Ø§Ù„Ø¬Ø§ÙŠØ©ØŸ", "Where is my next lecture?"),
+                      tr("ÙƒÙ… Ø³Ø§Ø¹ØªÙŠ ÙÙŠ Ø§Ù„Ø£Ø³Ø¨ÙˆØ¹ØŸ", "How many hours this week?"),
                     ]
                 ).map((s, i) => (
                   <Button
@@ -515,7 +515,7 @@ export default function AssistantPage() {
               )}
               {t.error && (
                 <p className="text-sm text-destructive">
-                  {tr("خطأ:", "Error:")} {t.error}
+                  {tr("Ø®Ø·Ø£:", "Error:")} {t.error}
                 </p>
               )}
               {t.applied && t.applied.length > 0 && (
@@ -551,7 +551,7 @@ export default function AssistantPage() {
               <button
                 onClick={() => setImages((p) => p.filter((_, j) => j !== i))}
                 className="absolute -end-1.5 -top-1.5 grid h-5 w-5 place-items-center rounded-full bg-destructive text-white"
-                aria-label={tr("شيل", "Remove")}
+                aria-label={tr("Ø´ÙŠÙ„", "Remove")}
               >
                 <X className="h-3 w-3" />
               </button>
@@ -575,7 +575,7 @@ export default function AssistantPage() {
           className="h-12 w-12 shrink-0"
           disabled={!canAttach || images.length >= 6}
           onClick={() => fileRef.current?.click()}
-          aria-label={tr("ارفع صورة", "Attach a file")}
+          aria-label={tr("Ø§Ø±ÙØ¹ ØµÙˆØ±Ø©", "Attach a file")}
         >
           <Paperclip className="h-4 w-4" />
         </Button>
@@ -590,7 +590,7 @@ export default function AssistantPage() {
               void send();
             }
           }}
-          placeholder={tr("اكتب سؤالك…", "Ask anything…")}
+          placeholder={tr("Ø§ÙƒØªØ¨ Ø³Ø¤Ø§Ù„Ùƒâ€¦", "Ask anythingâ€¦")}
           className="max-h-32 min-h-12 resize-none text-base"
         />
 
@@ -600,7 +600,7 @@ export default function AssistantPage() {
             variant="destructive"
             className="h-12 w-12 shrink-0"
             onClick={() => abortRef.current?.abort()}
-            aria-label={tr("قف", "Stop")}
+            aria-label={tr("Ù‚Ù", "Stop")}
           >
             <Square className="h-4 w-4" />
           </Button>
@@ -610,7 +610,7 @@ export default function AssistantPage() {
             className="h-12 w-12 shrink-0"
             disabled={!input.trim()}
             onClick={() => void send()}
-            aria-label={tr("ابعت", "Send")}
+            aria-label={tr("Ø§Ø¨Ø¹Øª", "Send")}
           >
             <Send className="h-4 w-4" />
           </Button>
@@ -625,7 +625,7 @@ export default function AssistantPage() {
               if (chats.activeId) void chats.deleteChat(chats.activeId);
               setStreamed([]);
             }}
-            aria-label={tr("امسح المحادثة", "Clear chat")}
+            aria-label={tr("Ø§Ù…Ø³Ø­ Ø§Ù„Ù…Ø­Ø§Ø¯Ø«Ø©", "Clear chat")}
           >
             <Trash2 className="h-4 w-4" />
           </Button>
