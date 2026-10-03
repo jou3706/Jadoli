@@ -1,4 +1,4 @@
-﻿import { test } from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
 import { clearStorage } from "./browser-shim.ts";
 import { applyActions } from "../src/lib/ai/apply-actions.ts";
@@ -150,7 +150,7 @@ test("an unknown action type is reported, not executed", async () => {
 
 test("splitAction pulls actions out of the visible text", () => {
   const reply = [
-    "ØªÙ…Ø§Ù…ØŒ Ø¶ÙØª Ø§Ù„Ù…Ø­Ø§Ø¶Ø±Ø©.",
+    "تمام، ضفت المحاضرة.",
     "",
     "```action",
     '[{"type":"add_lecture","lecture":{"subject_name":"Physics","day":1,',
@@ -158,13 +158,13 @@ test("splitAction pulls actions out of the visible text", () => {
     "```",
   ].join("\n");
   const { visible, actions } = splitAction(reply);
-  assert.equal(visible, "ØªÙ…Ø§Ù…ØŒ Ø¶ÙØª Ø§Ù„Ù…Ø­Ø§Ø¶Ø±Ø©.");
+  assert.equal(visible, "تمام، ضفت المحاضرة.");
   assert.equal(actions.length, 1);
   assert.equal((actions[0] as { type: string }).type, "add_lecture");
 });
 
 test("splitAction survives a broken code fence", () => {
-  const { visible, actions } = splitAction("Ù†Øµ\n```action\n{not json}\n```");
+  const { visible, actions } = splitAction("نص\n```action\n{not json}\n```");
   assert.equal(actions.length, 0);
   assert.equal(visible.includes("{not json}"), false);
 });
