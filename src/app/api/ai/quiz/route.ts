@@ -45,7 +45,7 @@ export async function POST(req: Request) {
       {
         error: `MATERIALS_UNREADABLE:${s.id}`,
         reason: s.reason,
-        message: skipReason(s.reason, src.language),
+        message: skipReason(s.reason, src.language === "en" ? "en" : "ar"),
       },
       { status: 422 },
     );

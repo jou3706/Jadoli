@@ -35,7 +35,7 @@ export function QuizBuilder({
   const [chapter, setChapter] = useState("");
   const [topic, setTopic] = useState(defaultTopic ?? "");
   const [count, setCount] = useState(10);
-  const [language, setLanguage] = useState<"ar" | "en">("ar");
+  const [language, setLanguage] = useState<QuizSource["language"]>("auto");
 
   useEffect(() => {
     if (defaultSubject) setSubjectKey(defaultSubject);
@@ -106,8 +106,9 @@ export function QuizBuilder({
           <select
             className="w-full rounded-md border px-2 py-1"
             value={language}
-            onChange={(e) => setLanguage(e.target.value as "ar" | "en")}
+            onChange={(e) => setLanguage(e.target.value as QuizSource["language"])}
           >
+            <option value="auto">تلقائي (حسب الملف أو العنوان)</option>
             <option value="ar">العربية</option>
             <option value="en">English</option>
           </select>

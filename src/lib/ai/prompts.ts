@@ -169,8 +169,17 @@ If you genuinely cannot read the timetable, return [].`;
  * runs server-side where the file can actually be read, so its only job is the
  * JSON.
  */
-export function buildQuizPrompt(language: "ar" | "en") {
-  const lang = language === "en" ? "English" : "Arabic";
+export function buildQuizPrompt(language: "auto" | "ar" | "en") {
+  const languageRule =
+    language === "auto"
+      ? `- Write the title, every question, every option and every explanation in
+  the SAME language as the material itself. Detect that language from the
+  content you are given; if the material mixes languages, use the language most
+  of it is written in. If instead you are given only a chapter or topic title
+  with no file, use the language that title is written in.`
+      : `- Write the title, every question, every option and every explanation in
+  ${language === "en" ? "English" : "Arabic"}. Even when the material itself is in
+  a different language, write in ${language === "en" ? "English" : "Arabic"}.`;
   return `You write a short practice exam from the material you are given.
 
 Return ONLY this JSON, with no prose and no markdown fence:
@@ -197,8 +206,7 @@ Return ONLY this JSON, with no prose and no markdown fence:
   words.
 - Every question has an "explanation" written as the reason the answer is right.
 - Mix the types. Never repeat a question.
-- Write the title, every question, every option and every explanation in
-  ${lang}. Even when the material itself is in English, write in ${lang}.
+${languageRule}
 - Return between 3 and 20 questions.`;
 }
 
@@ -222,12 +230,13 @@ the app.
 2. Once you know the subject, reply with ONLY this action block and nothing else:
 
 \`\`\`action
-{"type":"make_quiz","quiz":{"subjectKey":"<exact course name>","count":10,"language":"ar"}}
+{"type":"make_quiz","quiz":{"subjectKey":"<exact course name>","count":10,"language":"auto"}}
 \`\`\`
 
 - subjectKey must be the exact course name from the injected course list.
 - count: how many questions to make, default 10, between 3 and 20.
-- language: "ar" unless the student is writing in English.
+- language: leave it as "auto"; the exam matches the language of the material or
+  the chapter/topic title.
 - The app then shows the student every material in that course, and they choose
   the files themselves. Do not pick a file for them.
 - If the student asked for a free topic that has no saved file, add

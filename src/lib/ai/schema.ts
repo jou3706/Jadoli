@@ -64,7 +64,7 @@ export const quizSourceSchema = z
     chapter: z.string().trim().min(1).optional(),
     topic: z.string().trim().min(1).optional(),
     count: z.number().int().min(3).max(20).default(10),
-    language: z.enum(["ar", "en"]).default("ar"),
+    language: z.enum(["auto", "ar", "en"]).default("auto"),
   })
   .superRefine((v, ctx) => {
     if (v.source === "material" && v.materialIds.length === 0) {
