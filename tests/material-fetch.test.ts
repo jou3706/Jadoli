@@ -152,6 +152,53 @@ test("the dialog reads the body as text so a platform error survives", async () 
   );
 });
 
+test("the bucket name is not imported from a client module", async () => {
+  // The bug this guards: BUCKET used to come from db/storage.ts, which is
+  // "use client". Server code importing a value from a client module gets a
+  // client-reference proxy, not the string, so `storage.from(BUCKET)` named no
+  // bucket and Supabase answered NoSuchBucket - which reads as a missing file.
+  const text = await fetchSrc();
+  assert.match(text, /import \{ BUCKET \} from "@\/lib\/db\/bucket"/);
+  assert.ok(
+    !/import \{[^}]*BUCKET[^}]*\} from "@\/lib\/db\/storage"/.test(text),
+    "the bucket name must not come from the 'use client' storage module",
+  );
+
+  // And the constant itself must be a plain literal in a module with no directive.
+  const bucket = await readFile(new URL("../src/lib/db/bucket.ts", import.meta.url), "utf8");
+  assert.match(bucket, /export const BUCKET = "materials"/);
+  // The directive itself, not the phrase: the file explains this hazard in prose.
+  assert.ok(
+    !/^\s*["']use client["'];?\s*$/m.test(bucket),
+    "db/bucket.ts must stay free of the 'use client' directive so the server can read the value",
+  );
+});
+
+test("no server module imports a value from a client-only module", async () => {
+  const { readdir } = await import("node:fs/promises");
+  const clientOnly = ["storage", "supabase-client", "events"];
+  const bad: string[] = [];
+
+  async function walk(dir: string) {
+    for (const e of await readdir(dir, { withFileTypes: true })) {
+      const full = `${dir}/${e.name}`;
+      if (e.isDirectory()) { await walk(full); continue; }
+      if (!/\.(ts|tsx)$/.test(e.name)) continue;
+      const text = await readFile(full, "utf8");
+      if (!text.includes('"server-only"')) continue;
+      for (const mod of clientOnly) {
+        // storage/bucket.ts is the deliberate exception: a shared constant module.
+        if (mod === "storage" && /from "@\/lib\/db\/bucket"/.test(text)) continue;
+        const re = new RegExp(`import \\{[^}]*\\} from "@/lib/db/${mod}"`);
+        if (re.test(text)) bad.push(`${full} imports @/lib/db/${mod}`);
+      }
+    }
+  }
+  await walk(new URL("../src", import.meta.url).pathname.replace(/^\//, "").replace(/^([A-Za-z]):/, "$1:/"));
+
+  assert.deepEqual(bad, [], "server modules must not import from client-only modules");
+});
+
 test("a file that cannot be read is reported, not silently dropped", async () => {
   const route = await routeSrc();
   // Nothing readable at all is refused outright, rather than returning an empty

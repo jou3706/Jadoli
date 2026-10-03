@@ -11,10 +11,11 @@
 
 import { getSupabase } from "./supabase-client";
 
-export const BUCKET = "materials";
-
-/** Refuse anything bigger than this — a video lecture is not a study note. */
-export const MAX_FILE_BYTES = 25 * 1024 * 1024;
+// Defined in a module with no "use client" and re-exported for existing client
+// imports. Server code must import from ./bucket directly: a value pulled out of
+// a "use client" module arrives as a client-reference proxy, not the string.
+import { BUCKET, MAX_FILE_BYTES } from "./bucket";
+export { BUCKET, MAX_FILE_BYTES };
 
 export const canStoreFiles = () => getSupabase() !== null;
 

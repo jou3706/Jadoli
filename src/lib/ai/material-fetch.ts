@@ -27,7 +27,10 @@ import "server-only";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-import { BUCKET } from "@/lib/db/storage";
+// From ./bucket, never from ./db/storage: that module is "use client", and a
+// value imported from it here arrives as a client-reference proxy rather than the
+// bucket name, so the download asks for a bucket that does not exist.
+import { BUCKET } from "@/lib/db/bucket";
 import { isOwnPath, mimeForName } from "./material-path";
 
 /** The one table this module reads. Named here rather than imported from the
