@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { completeJson } from "@/lib/ai/providers";
-import { QUIZ_SYSTEM } from "@/lib/ai/prompts";
+import { buildQuizPrompt } from "@/lib/ai/prompts";
 import { quizSetSchema, quizSourceSchema } from "@/lib/ai/schema";
 import { loadMaterials } from "@/lib/ai/material-fetch";
 import type { ModelId } from "@/lib/ai/models";
@@ -59,7 +59,7 @@ export async function POST(req: Request) {
   try {
     const raw = await completeJson(
       "gemini-35-flash" as ModelId,
-      QUIZ_SYSTEM,
+      buildQuizPrompt(src.language),
       user,
       undefined,
       ac.signal,

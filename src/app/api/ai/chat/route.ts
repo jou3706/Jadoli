@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { chatBodySchema } from "@/lib/ai/schema";
 import { streamChat } from "@/lib/ai/providers";
-import { ASSISTANT_SYSTEM, MATERIALS_SYSTEM, QUIZ_SYSTEM } from "@/lib/ai/prompts";
+import { ASSISTANT_SYSTEM, MATERIALS_SYSTEM, QUIZ_CHAT_SYSTEM } from "@/lib/ai/prompts";
 import { describePools, hasKeys, totalKeys } from "@/lib/ai/keys";
 import type { ModelId } from "@/lib/ai/models";
 
@@ -40,7 +40,7 @@ export async function POST(req: Request) {
   // choose its own prompt.
   const system =
     mode === "quiz"
-      ? QUIZ_SYSTEM
+      ? QUIZ_CHAT_SYSTEM
       : mode === "materials"
         ? MATERIALS_SYSTEM
         : ASSISTANT_SYSTEM;

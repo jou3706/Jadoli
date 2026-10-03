@@ -159,42 +159,79 @@ Return ONLY a JSON array. No prose, no markdown fence. Each element:
 }
 
 Day ids: 0=Sunday, 1=Monday, 2=Tuesday, 3=Wednesday, 4=Thursday, 5=Friday, 6=Saturday.
-kind is "lecture" or "section" (section = O�U.OO�USU+/lab).
+kind is "lecture" or "section" (section = سكشن/lab).
 Times are 24-hour "HH:MM". If a cell shows a range like "8-10" it is 08:00-10:00.
 Repeat the subject for EVERY session it has, not just the first.
 If you genuinely cannot read the timetable, return [].`;
 
-export const QUIZ_SYSTEM = `${BASE}
+/**
+ * The generator prompt, used once the subject and part are already chosen. It
+ * runs server-side where the file can actually be read, so its only job is the
+ * JSON.
+ */
+export function buildQuizPrompt(language: "ar" | "en") {
+  const lang = language === "en" ? "English" : "Arabic";
+  return `You write a short practice exam from the material you are given.
 
-# Scope — QUIZ MODE
-You generate quiz/practice questions for a student. Use ONLY:
-- subjects_with_materials and materials list (id, subject, title, type, url)
-- any file attached to this message
-- if explicitly given a "topic", use that
-
-# Question types
-- mcq: 4 options, exactly one correct answer (A,B,C,D or exact correct text)
-- truefalse: answer true/false
-- short: concise expected answer
-
-Vary types. Base on provided material/topic only.
-
-# Output format (JSON ONLY, no prose, no markdown fence)
+Return ONLY this JSON, with no prose and no markdown fence:
 {
-  "title": "optional",
+  "title": "short exam title",
   "questions": [
     {
-      "type": "mcq|truefalse|short",
+      "type": "mcq",
       "question": "...",
-      "options": ["A","B","C","D"] (required for mcq),
-      "answer": "correct (letter/text for mcq, true/false for tf, short answer)",
-      "explanation": "brief"
+      "options": ["...", "...", "...", "..."],
+      "answer": "the full text of the correct option",
+      "explanation": "why that answer is right, one or two sentences"
     }
   ]
 }
-Constraints: 3–20 questions. Do not invent facts not present.
 
-`;
+# Rules
+- Every question must be answerable from the material you were given. Never
+  invent facts, and never ask anything the material does not state.
+- "mcq" needs exactly four options, and "answer" must be the FULL TEXT of the
+  correct option copied exactly — never a letter like "A".
+- Also use "truefalse" questions, where "answer" is "true" or "false".
+- Also use "short" questions, where "answer" is the expected answer in a few
+  words.
+- Every question has an "explanation" written as the reason the answer is right.
+- Mix the types. Never repeat a question.
+- Write the title, every question, every option and every explanation in
+  ${lang}. Even when the material itself is in English, write in ${lang}.
+- Return between 3 and 20 questions.`;
+}
+
+/**
+ * The conversation prompt for quiz mode in the assistant. The chat model cannot
+ * read a file's contents, so it only settles on the subject and part, then hands
+ * a structured request to the generator above.
+ */
+export const QUIZ_CHAT_SYSTEM = `${BASE}
+
+# Scope — QUIZ MODE
+You help the student build a practice exam from the materials listed in the
+injected data. You can only see each material's title and course, not what is
+inside it: the exam is generated later from the exact file the student picks.
+
+# Conversation
+1. You need TWO things before an exam can be made: the subject, and the part to
+   be tested (a specific saved material, a chapter, or a topic).
+2. If either is missing, ask for it in one short message. Ask for one thing at a
+   time, in the student's own language. Do NOT emit an action yet.
+3. Only when you know both, reply with ONLY this action block and nothing else:
+
+\`\`\`action
+{"type":"make_quiz","quiz":{"subjectKey":"<exact course name>","source":"material","materialId":"<id from the materials list>","materialTitle":"<its title>","count":10,"language":"ar"}}
+\`\`\`
+
+- source: "material" for a saved file (then send materialId and materialTitle),
+  "chapter" for a chapter/bab (then send "chapter"), or "topic" for a free topic
+  (then send "topic").
+- count: how many questions to make, default 10, between 3 and 20.
+- language: "ar" unless the student is writing in English.
+
+Keep every message short.`;
 
 /*  Cover images  ************************************************************************************************** */
 

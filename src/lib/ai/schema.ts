@@ -101,6 +101,48 @@ export type QuizQuestion = z.infer<typeof quizQuestionSchema>;
 export type QuizSet = z.infer<typeof quizSetSchema>;
 
 /**
+ * Index of the correct MCQ option.
+ *
+ * Accepts the exact option text, a letter ("A"–"D") or a 1-based number, because
+ * models drift between them and a quiz that cannot mark the right answer is
+ * worse than no quiz.
+ */
+export function mcqCorrectIndex(q: QuizQuestion): number {
+  if (!q.options || q.options.length === 0) return -1;
+  const ans = q.answer.trim();
+  const byText = q.options.findIndex((o) => o.trim() === ans);
+  if (byText >= 0) return byText;
+  if (ans.length === 1) {
+    const li = "ABCDEFGH".indexOf(ans.toUpperCase());
+    if (li >= 0 && li < q.options.length) return li;
+  }
+  const num = Number(ans);
+  if (Number.isInteger(num) && num >= 1 && num <= q.options.length) return num - 1;
+  return -1;
+}
+
+/** Pulls a quiz out of model output: bare JSON, a ```json fence, or JSON in prose. */
+export function parseQuiz(text: string): QuizSet | null {
+  const candidates = [text.trim()];
+  const fence = /```(?:json)?\s*([\s\S]*?)```/gi;
+  let m: RegExpExecArray | null;
+  while ((m = fence.exec(text)) !== null) candidates.push(m[1].trim());
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start >= 0 && end > start) candidates.push(text.slice(start, end + 1));
+  for (const c of candidates) {
+    if (!c) continue;
+    try {
+      const parsed = quizSetSchema.safeParse(JSON.parse(c));
+      if (parsed.success) return parsed.data;
+    } catch {
+      /* not JSON: try the next candidate */
+    }
+  }
+  return null;
+}
+
+/**
  * One file to read, named so the model can be told which question came from
  * which page.
  *

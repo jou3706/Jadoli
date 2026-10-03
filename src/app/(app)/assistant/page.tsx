@@ -21,7 +21,8 @@ import { useList } from "@/lib/db/store";
 import { useChats } from "@/hooks/use-chats";
 import { applyActions } from "@/lib/ai/apply-actions";
 import { buildContext, withContext } from "@/lib/ai/context";
-import { splitAction, type AssistantMode } from "@/lib/ai/schema";
+import { splitAction, parseQuiz, type AssistantMode, type QuizSet } from "@/lib/ai/schema";
+import { QuizSession } from "@/components/review/quiz-session";
 import { MODELS, findModel } from "@/lib/ai/models";
 import { nowCairo } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
@@ -47,8 +48,28 @@ type Turn = {
   text: string;
   images?: Attachment[];
   applied?: { ok: boolean; label: string }[];
+  quiz?: QuizSet;
   error?: string;
 };
+
+type QuizRequest = {
+  subjectKey?: string;
+  source?: string;
+  materialId?: string;
+  materialTitle?: string;
+  chapter?: string;
+  topic?: string;
+  count?: number;
+  language?: string;
+};
+
+/** Narrows an assistant action to the quiz request the chat model emits. */
+function asQuizAction(a: unknown): QuizRequest | null {
+  if (!a || typeof a !== "object") return null;
+  const o = a as { type?: unknown; quiz?: unknown };
+  if (o.type !== "make_quiz" || !o.quiz || typeof o.quiz !== "object") return null;
+  return o.quiz as QuizRequest;
+}
 
 export default function AssistantPage() {
   const { tr, lang } = useI18n();
@@ -98,7 +119,7 @@ export default function AssistantPage() {
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem(MODE_KEY);
-      if (saved === "general" || saved === "materials") setMode(saved);
+      if (saved === "general" || saved === "materials" || saved === "quiz") setMode(saved);
     } catch {
       /* private mode: keep the default */
     }
@@ -268,11 +289,30 @@ export default function AssistantPage() {
       }
 
       const { visible, actions } = splitAction(answer);
-      const applied = actions.length ? await applyActions(actions, mode) : undefined;
-      patch({ text: visible, applied });
-      // Save the answer without the action JSON the model appended.
-      if (chatId && visible.trim()) {
-        await chats.saveMessage(chatId, "assistant", visible).catch(() => {});
+      const quizReq = mode === "quiz" ? (actions.map(asQuizAction).find(Boolean) ?? null) : null;
+      const dbActions = quizReq ? actions.filter((a) => !asQuizAction(a)) : actions;
+      const applied = dbActions.length ? await applyActions(dbActions, mode) : undefined;
+
+      let quizSet: QuizSet | null = null;
+      if (quizReq) {
+        const qres = await fetch("/api/ai/quiz", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(quizReq),
+          signal: ac.signal,
+        });
+        const qdata = await qres.json().catch(() => ({}));
+        if (!qres.ok) throw new Error(String(qdata.error ?? "quiz generation failed"));
+        quizSet = qdata as QuizSet;
+      }
+      // The model sometimes writes the quiz itself instead of the action block.
+      if (!quizSet && mode === "quiz") quizSet = parseQuiz(visible);
+
+      patch({ text: quizSet ? "" : visible, applied, quiz: quizSet ?? undefined });
+      // Save a short marker rather than the action JSON the model appended.
+      const savedText = quizSet ? tr("اختبار تفاعلي", "Interactive quiz") : visible;
+      if (chatId && savedText.trim()) {
+        await chats.saveMessage(chatId, "assistant", savedText).catch(() => {});
       }
     } catch (e) {
       const err = e as Error;
@@ -442,33 +482,45 @@ export default function AssistantPage() {
           <div className="grid h-full place-items-center p-6 text-center">
             <div>
               <p className="font-display text-xl font-bold">
-                {mode === "materials"
-                  ? tr("اسأل عن مذكراتك", "Ask about your materials")
-                  : tr("اسأل أي حاجة عن جدولك", "Ask anything about your schedule")}
+                {mode === "quiz"
+                  ? tr("اعمل امتحان من مذكراتك", "Make an exam from your materials")
+                  : mode === "materials"
+                    ? tr("اسأل عن مذكراتك", "Ask about your materials")
+                    : tr("اسأل أي حاجة عن جدولك", "Ask anything about your schedule")}
               </p>
               <p className="mt-1 text-sm text-muted-foreground">
-                {mode === "materials"
+                {mode === "quiz"
                   ? tr(
-                      "اقرا قائمة مذكراتك، ارفع ملف واسأل عنه، أو ادّيه لينك يحفظهولك.",
-                      "Read through your material list, attach a file and ask about it, or hand it a link to save for you.",
+                      "قولي المادة والجزء اللي عايز تتمرن عليه، وهجهزلك امتحان اختيارات مع التصحيح والسبب.",
+                      "Tell me the subject and the part, and I'll build a multiple-choice exam with instant feedback and explanations.",
                     )
-                  : tr(
-                      "المساعد شايف جدولك ودرجاتك ومناسبات الجامعة، ويقدر يضيف محاضرات أو درجات ليك.",
-                      "The assistant can see your lectures, grades and events, and can add lectures or grades for you.",
-                    )}
+                  : mode === "materials"
+                    ? tr(
+                        "اقرا قائمة مذكراتك، ارفع ملف واسأل عنه، أو ادّيه لينك يحفظهولك.",
+                        "Read through your material list, attach a file and ask about it, or hand it a link to save for you.",
+                      )
+                    : tr(
+                        "المساعد شايف جدولك ودرجاتك ومناسبات الجامعة، ويقدر يضيف محاضرات أو درجات ليك.",
+                        "The assistant can see your lectures, grades and events, and can add lectures or grades for you.",
+                      )}
               </p>
               <div className="mt-3 flex flex-wrap justify-center gap-2">
-                {(mode === "materials"
+                {(mode === "quiz"
                   ? [
-                      tr("قائمة مذكراتي", "List my materials"),
-                      tr("عندك مذكرات لمادة إيه؟", "Which courses have materials?"),
-                      tr("احفظ اللينك ده: ...", "Save this link: ..."),
+                      tr("عايز امتحان", "I want an exam"),
+                      tr("امتحنّي في آخر محاضرة", "Quiz me on the last lecture"),
                     ]
-                  : [
-                      tr("امبارح عندي إيه؟", "What do I have tomorrow?"),
-                      tr("فين المحاضرة الجاية؟", "Where is my next lecture?"),
-                      tr("كم ساعتي في الأسبوع؟", "How many hours this week?"),
-                    ]
+                  : mode === "materials"
+                    ? [
+                        tr("قائمة مذكراتي", "List my materials"),
+                        tr("عندك مذكرات لمادة إيه؟", "Which courses have materials?"),
+                        tr("احفظ اللينك ده: ...", "Save this link: ..."),
+                      ]
+                    : [
+                        tr("امبارح عندي إيه؟", "What do I have tomorrow?"),
+                        tr("فين المحاضرة الجاية؟", "Where is my next lecture?"),
+                        tr("كم ساعتي في الأسبوع؟", "How many hours this week?"),
+                      ]
                 ).map((s, i) => (
                   <Button
                     key={i}
@@ -489,6 +541,23 @@ export default function AssistantPage() {
             key={t.id}
             className={t.role === "user" ? "ms-auto max-w-[85%] " : "me-auto max-w-[90%] "}
           >
+            {t.quiz ? (
+              <QuizSession
+                title={t.quiz.title}
+                questions={t.quiz.questions}
+                onDone={() =>
+                  setStreamed((p) =>
+                    p
+                      ? p.map((x) =>
+                          x.id === t.id
+                            ? { ...x, quiz: undefined, text: tr("انتهى الاختبار", "Quiz finished") }
+                            : x,
+                        )
+                      : p,
+                  )
+                }
+              />
+            ) : (
             <div
               className={
                 t.role === "user"
@@ -532,6 +601,7 @@ export default function AssistantPage() {
                 </ul>
               )}
             </div>
+            )}
           </div>
         ))}
       </div>

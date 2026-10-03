@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Bot,
+  Brain,
   CalendarDays,
   CalendarRange,
   ClipboardCheck,
@@ -29,6 +30,7 @@ export const NAV = [
   { to: "/attendance", ar: "الحضور", en: "Attendance", Icon: ClipboardCheck },
   { to: "/subjects", ar: "المواد", en: "Subjects", Icon: CalendarDays },
   { to: "/review", ar: "المراجعة", en: "Review", Icon: Layers },
+  { to: "/quiz", ar: "الاختبارات", en: "Quiz", Icon: Brain },
   { to: "/halls", ar: "القاعات", en: "Halls", Icon: DoorOpen },
   { to: "/gpa", ar: "المعدل", en: "GPA", Icon: GraduationCap },
   { to: "/events", ar: "الأحداث", en: "Events", Icon: Sparkles },
