@@ -22,8 +22,6 @@ import { useI18n } from "@/lib/i18n";
 import { useScheduleContext } from "@/lib/schedule-context";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { ThemeToggle } from "./theme-toggle";
-import { LangToggle } from "./lang-toggle";
 
 export const NAV = [
   { to: "/", ar: "الجدول", en: "Schedule", Icon: LayoutGrid },
@@ -84,8 +82,6 @@ export function Sidebar({
       </nav>
 
       <div className="mt-auto flex shrink-0 flex-col items-center gap-2 pt-2">
-        <ThemeToggle variant="ghost" />
-        <LangToggle variant="ghost" />
         <Button
           onClick={() => {
             setEditMode(editMode);
