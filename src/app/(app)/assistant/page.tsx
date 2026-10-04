@@ -32,7 +32,7 @@ import {
 import { newQuestions, questionPayload } from "@/lib/quiz-bank";
 import { QuizBuilder } from "@/components/ai/quiz-builder";
 import { QuizSession } from "@/components/review/quiz-session";
-import { MODELS, findModel } from "@/lib/ai/models";
+import { MODELS, findModel, type ModelDef } from "@/lib/ai/models";
 import { nowCairo } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,22 @@ import type { Attachment } from "@/lib/db/types";
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_PDF_BYTES = 15 * 1024 * 1024;
 const MODE_KEY = "jadoli:assistant-mode";
+
+/**
+ * The order the providers are offered in, and what to call them.
+ *
+ * Every model is offered, not only the ones that can read a picture. The other
+ * pools are cheaper and often faster, and a question with no attachment in it
+ * does not need a vision model - hiding them left one provider looking like the
+ * only choice there was.
+ */
+const PROVIDER_ORDER: ModelDef["provider"][] = ["gemini", "groq", "openrouter"];
+
+const PROVIDER_LABEL: Record<ModelDef["provider"], [string, string]> = {
+  gemini: ["جوجل Gemini", "Google Gemini"],
+  groq: ["Groq", "Groq"],
+  openrouter: ["OpenRouter", "OpenRouter"],
+};
 
 const readAsDataUrl = (file: File) =>
   new Promise<string>((resolve, reject) => {
@@ -176,6 +192,16 @@ export default function AssistantPage() {
 
   const def = findModel(model);
   const canAttach = def.supportsImages || def.supportsPdf === true;
+
+  const providerGroups = useMemo(
+    () =>
+      PROVIDER_ORDER.map((p) => ({
+        id: p,
+        label: tr(PROVIDER_LABEL[p][0], PROVIDER_LABEL[p][1]),
+        models: MODELS.filter((m) => m.provider === p),
+      })).filter((g) => g.models.length > 0),
+    [tr],
+  );
 
   // A different thread means a different history.
   //
@@ -443,16 +469,34 @@ export default function AssistantPage() {
           <select
             value={model}
             onChange={(e) => {
+              const next = findModel(e.target.value);
               setModel(e.target.value);
-              if (!findModel(e.target.value).supportsImages) setImages([]);
+              // Saying so beats silently throwing away the attachment somebody
+              // just picked a file for.
+              if (!(next.supportsImages || next.supportsPdf) && images.length) {
+                setImages([]);
+                toast({
+                  title: tr(
+                    `${next.label} نص بس، فشِلنا المرفقات`,
+                    `${next.label} is text only, so the attachments were dropped`,
+                  ),
+                });
+              }
             }}
             className="h-9 rounded-md border bg-background px-2 text-sm"
             aria-label={tr("اختار الموديل", "Choose model")}
           >
-            {MODELS.filter((m) => m.supportsImages || m.supportsPdf).map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label}
-              </option>
+            {providerGroups.map((group) => (
+              <optgroup key={group.id} label={group.label}>
+                {group.models.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label}
+                    {m.supportsImages || m.supportsPdf
+                      ? ""
+                      : tr(" — نص بس", " — text only")}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </div>
