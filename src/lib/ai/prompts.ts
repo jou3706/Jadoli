@@ -289,6 +289,31 @@ Return ONLY this JSON, with no prose and no markdown fence:
   drop a quiz as "other" rows, since they are dates a student needs.
 - If the file has no dated events at all, return an empty list.`;
 
+/**
+ * Reading a material into something you can revise from.
+ *
+ * Three parts on purpose, because a student opening a lecture file is asking
+ * three separate questions: what is this about, what has to be in my head by the
+ * exam, and what do these words mean. Asking for them together keeps one read of
+ * the file serving all three.
+ */
+export const buildSummaryPrompt = (language: "ar" | "en") => `You read a course material and write what a student needs from it: a summary, the key points, and the vocabulary.
+
+Return ONLY this JSON, with no prose and no markdown fence:
+{
+  "summary": "what the material covers, in a few paragraphs",
+  "key_points": ["the things that have to be remembered, each one a line"],
+  "glossary": [ { "term": "the word or phrase", "meaning": "what it means here" } ]
+}
+
+# Rules
+- Everything comes from the material. If it is not there, it is not in here.
+- "key_points" is the part to revise from: 5 to 10 lines, each a fact, no advice.
+- "glossary" is for terms a student would not know without this course: technical
+  vocabulary, named theorems, abbreviations. Not everyday words.
+- Keep the language of the material itself, unless told otherwise below.
+- Plain prose only: no markdown, no headings, no emoji.${language === "en" ? "\n- Write the summary, the key points and the meanings in English." : "\n- اكتب الملخص والنقاط ومعاني المصطلحات بالعربية."}`;
+
 export const QUIZ_CHAT_SYSTEM = `${BASE}
 
 # Scope — QUIZ MODE

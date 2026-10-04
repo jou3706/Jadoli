@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import {
+  BookOpen,
   CalendarPlus,
   Copy,
   ExternalLink,
@@ -20,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { detectKind, kindMeta, pickerMaterials, safeUrl, sharedFileCounts, type MaterialKindId } from "@/lib/materials";
 import { SyllabusDialog } from "@/components/subjects/syllabus-dialog";
+import { SummaryDialog } from "@/components/subjects/summary-dialog";
 import { formatBytes, removeStoredFile } from "@/lib/db/storage";
 import { AddMaterialRow } from "@/components/subjects/add-material-row";
 import { cn } from "@/lib/utils";
@@ -50,6 +52,7 @@ export function MaterialRow({
   const [title, setTitle] = useState(material.title);
   const [busy, setBusy] = useState(false);
   const [dates, setDates] = useState(false);
+  const [summary, setSummary] = useState(false);
 
   const kindId: MaterialKindId = detectKind(material.url, material.type);
   const kind = kindMeta(kindId);
@@ -118,16 +121,28 @@ export function MaterialRow({
         {/* Only a file this app holds can be read: the route fetches it through
             the student's own storage, and a link has no file behind it. */}
         {material.file_path && kindId !== "video" && (
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-8 w-8"
-            aria-label={tr("استخرج المواعيد", "Extract dates")}
-            title={tr("استخرج مواعيد الامتحانات من الملف", "Pull exam dates out of this file")}
-            onClick={() => setDates(true)}
-          >
-            <CalendarPlus className="h-3.5 w-3.5" />
-          </Button>
+          <>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8"
+              aria-label={tr("لخّص الملف", "Summarise")}
+              title={tr("ملخص وأهم النقاط والمصطلحات", "Summary, key points and vocabulary")}
+              onClick={() => setSummary(true)}
+            >
+              <BookOpen className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8"
+              aria-label={tr("استخرج المواعيد", "Extract dates")}
+              title={tr("استخرج مواعيد الامتحانات من الملف", "Pull exam dates out of this file")}
+              onClick={() => setDates(true)}
+            >
+              <CalendarPlus className="h-3.5 w-3.5" />
+            </Button>
+          </>
         )}
         {href && (
           <>
@@ -185,6 +200,9 @@ export function MaterialRow({
           hidden dialog for every file on every course. */}
       {dates && (
         <SyllabusDialog open={dates} onOpenChange={setDates} material={material} />
+      )}
+      {summary && (
+        <SummaryDialog open={summary} onOpenChange={setSummary} material={material} />
       )}
     </li>
   );
