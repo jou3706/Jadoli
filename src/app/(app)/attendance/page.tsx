@@ -1,11 +1,12 @@
 "use client";
 
 import { useMemo } from "react";
-import { CheckCircle2, ClipboardCheck, Flame, TrendingUp } from "lucide-react";
+import { CheckCircle2, ClipboardCheck, Flame, ShieldAlert, TrendingUp } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { useList } from "@/lib/db/store";
 import { cn, nowCairo, weekStartKey, type Lang } from "@/lib/utils";
 import { lectureTitle } from "@/lib/schedule";
+import { ATTENDANCE_THRESHOLD, attendanceByCourse } from "@/lib/attendance";
 
 /** The 8 most recent weeks, including empty ones, so gaps stay visible. */
 const WEEKS_SHOWN = 8;
@@ -72,6 +73,13 @@ export default function AttendancePage() {
       .sort((a, b) => a.pct - b.pct || b.attended - a.attended);
   }, [lectures, byLecture, perWeek, thisWeek]);
 
+  /** Per course rather than per lecture: the allowance is a course-level number. */
+  const courses = useMemo(
+    () => attendanceByCourse(lectures, records, thisWeek),
+    [lectures, records, thisWeek],
+  );
+  const belowLine = courses.filter((c) => c.risk !== "safe").length;
+
   const thisWeekCount = perWeek.get(thisWeek)?.size ?? 0;
   const thisWeekPct = lectures.length ? thisWeekCount / lectures.length : 0;
   const totalAttended = useMemo(() => {
@@ -91,6 +99,27 @@ export default function AttendancePage() {
         : p >= 0.5
           ? "text-amber-600"
           : "text-rose-600";
+
+  /** What the number on a course card means, said as a sentence. */
+  const allowanceText = (c: { allowance: number; pct: number; margin: number }) => {
+    if (c.allowance > 0) {
+      const n = c.allowance;
+      return tr(
+        n === 1 ? "تقدر تغيب محاضرة واحدة كمان" : `تقدر تغيب ${n} محاضرات كمان`,
+        `You can miss ${n} more session${n === 1 ? "" : "s"}`,
+      );
+    }
+    if (c.allowance === 0) {
+      return tr(
+        "على الحد بالظبط — أي محاضرة تفوتك تنزلك تحت الـ75%",
+        "Exactly on the line — one more miss puts you under",
+      );
+    }
+    return tr(
+      `تحت الحد بـ ${Math.abs(Math.round(c.margin * 100))} نقطة — لازم تحضر كل المحاضرات الباقية`,
+      `Below the line by ${Math.abs(Math.round(c.margin * 100))} points — attend everything from here`,
+    );
+  };
 
   const day = (key: string) => `${key.slice(8, 10)}/${key.slice(5, 7)}`;
 
@@ -141,6 +170,75 @@ export default function AttendancePage() {
         </div>
       </div>
 
+      {courses.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-baseline justify-between gap-2">
+            <h2 className="flex items-center gap-1.5 text-sm font-semibold">
+              <ShieldAlert className="h-4 w-4 text-primary" />
+              {tr("خطر الحضور حسب المادة", "Attendance risk by course")}
+            </h2>
+            {belowLine > 0 && (
+              <span className="text-xs font-medium text-rose-600">
+                {belowLine} {tr("مادة على الخط", belowLine === 1 ? "course on the line" : "courses on the line")}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {tr(
+              `الحد الأدنى ${Math.round(ATTENDANCE_THRESHOLD * 100)}% — الرقم قدام كل مادة هو كام محاضرة تقدر تغيبها وتفضل فوق الحد.`,
+              `The line is ${Math.round(ATTENDANCE_THRESHOLD * 100)}% — each number is how many more sessions you can miss and still finish above it.`,
+            )}
+          </p>
+          {courses.map((c) => {
+            const tone =
+              c.risk === "risk"
+                ? "bg-rose-500"
+                : c.risk === "watch"
+                  ? "bg-amber-500"
+                  : "bg-emerald-500";
+            return (
+              <div key={c.subjectKey} className="rounded-xl border bg-card p-3">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="min-w-0 truncate font-semibold">{c.subjectKey}</p>
+                  <p
+                    className={cn(
+                      "shrink-0 text-sm font-bold tabular-nums",
+                      c.risk === "risk"
+                        ? "text-rose-600"
+                        : c.risk === "watch"
+                          ? "text-amber-600"
+                          : "text-emerald-600",
+                    )}
+                  >
+                    {Math.round(c.pct * 100)}%
+                  </p>
+                </div>
+                <div className="relative mt-2 h-2 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className={cn("h-full rounded-full transition-all", tone)}
+                    style={{ width: `${Math.min(100, c.pct * 100)}%` }}
+                  />
+                  {/* The line itself, so a rate can be read against it rather than
+                      guessed at. */}
+                  <span
+                    className="absolute inset-y-0 w-0.5 bg-foreground/50"
+                    style={{ left: `${ATTENDANCE_THRESHOLD * 100}%` }}
+                  />
+                </div>
+                <p
+                  className={cn(
+                    "mt-2 text-xs",
+                    c.risk === "risk" ? "font-medium text-rose-600" : "text-muted-foreground",
+                  )}
+                >
+                  {allowanceText(c)}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       <div className="rounded-2xl border bg-card p-4">
         <p className="flex items-center gap-1.5 text-sm font-semibold">
           <TrendingUp className="h-4 w-4 text-primary" />
@@ -168,7 +266,7 @@ export default function AttendancePage() {
 
       <div className="space-y-2">
         <h2 className="text-sm font-semibold">
-          {tr("نسبتك حسب المادة", "Rate by course")}
+          {tr("نسبتك حسب المحاضرة", "Rate by lecture")}
         </h2>
         {rows.length === 0 ? (
           <p className="rounded-xl border border-dashed bg-card p-8 text-center text-sm text-muted-foreground">
