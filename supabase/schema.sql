@@ -327,6 +327,69 @@ begin
 end;
 $$;
 
+-- ── Push subscriptions (see also 09-push-subscriptions.sql) ─────────────
+--
+-- A push subscription is an endpoint held by a browser, and the thing that has
+-- to send to it is a cron job on a server that has never met that browser. The
+-- two are joined here and nowhere else. Kept in this snapshot as well as in the
+-- incremental migration: a fresh project is built from this file, and a table
+-- that exists only in the numbered migration is a table a new install does not
+-- have.
+
+create table if not exists public.push_subscriptions (
+  id            uuid primary key default gen_random_uuid(),
+  user_id       uuid not null references auth.users on delete cascade,
+  -- The push service's address for this one browser, unique per user rather than
+  -- globally: two browsers of the same student are two subscriptions, and the
+  -- upsert that saves a re-subscribe has to land on the right one.
+  endpoint      text not null,
+  -- Public halves of the pair the browser generated, not secrets. The VAPID
+  -- private key is what must never be stored here or logged, and it is not.
+  p256dh        text not null,
+  auth          text not null,
+  language      text not null default 'ar' check (language in ('ar', 'en')),
+  -- IANA name. An event is a date and an hour with no zone attached, so without
+  -- this the send job would read a 09:00 exam as 09:00 UTC and every reminder
+  -- would arrive by however far that student's clock is from Greenwich.
+  time_zone     text not null default 'UTC',
+  created_date  timestamptz not null default now(),
+  last_seen     timestamptz not null default now(),
+  unique (user_id, endpoint)
+);
+
+create index if not exists push_subscriptions_user_idx
+  on public.push_subscriptions (user_id);
+
+alter table public.push_subscriptions enable row level security;
+
+drop policy if exists push_subscriptions_own on public.push_subscriptions;
+create policy push_subscriptions_own on public.push_subscriptions
+  for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+-- What has already gone out. The reminder window has a grace period on purpose,
+-- so a per-minute job would otherwise see the same event as due on every tick
+-- for half an hour. This is the memory that makes a minute-accurate schedule
+-- possible.
+create table if not exists public.push_deliveries (
+  id            uuid primary key default gen_random_uuid(),
+  user_id       uuid not null references auth.users on delete cascade,
+  -- alarmKey from src/lib/alarm.ts: event id, date and start time. The time is
+  -- part of it so moving an exam an hour later can ring again.
+  alarm_key     text not null,
+  sent_at       timestamptz not null default now(),
+  unique (user_id, alarm_key)
+);
+
+create index if not exists push_deliveries_sent_idx
+  on public.push_deliveries (sent_at);
+
+-- No policy, deliberately: nothing in the browser reads or writes this table.
+-- The send job runs with the service role and bypasses RLS by design, so RLS on
+-- with no policy means a client that guesses the name correctly gets nothing.
+alter table public.push_deliveries enable row level security;
+
 -- ── Share links (optional, if you outgrow the .data/shares file) ──────
 
 create table if not exists public.share_links (

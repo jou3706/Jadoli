@@ -26,8 +26,6 @@ import { alarmKey } from "@/lib/alarm";
  *    could name who was told what, and when, is a different product than this.
  */
 
-export const VAPID_SUBJECT = process.env.NEXT_PUBLIC_SITE_URL || "mailto:jadoli@example.com";
-
 /**
  * The three tables this module reads and writes, described by hand.
  *

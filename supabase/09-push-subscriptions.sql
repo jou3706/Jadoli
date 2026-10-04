@@ -123,10 +123,10 @@ select cron.schedule(
   '* * * * *',
   $cron$
     select net.http_post(
-      url     := 'https://<YOUR_APP_URL>/api/push/send',
+      url     := 'https://jadoli.vercel.app/api/push/send',
       headers := jsonb_build_object(
         'Content-Type',  'application/json',
-        'x-cron-secret', '<PUSH_CRON_SECRET>'
+        'x-cron-secret', '8e85472e2ca31d45aa67beb3a04806bc9b10c3181eabed6b50d61a34c6758387'
       ),
       body    := '{}'::jsonb
     )

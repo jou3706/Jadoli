@@ -222,6 +222,7 @@ test("every migration is safe to run twice", async () => {
     "../supabase/06-flashcards-and-review.sql",
     "../supabase/07-updated-date.sql",
     "../supabase/08-questions.sql",
+    "../supabase/09-push-subscriptions.sql",
   ];
   for (const rel of files) {
     const text = await read(new URL(rel, import.meta.url));
@@ -232,6 +233,37 @@ test("every migration is safe to run twice", async () => {
     assert.ok(
       !/add column (?!if not exists)/i.test(text),
       `${rel} has an add column that would fail on a second run`,
+    );
+  }
+});
+
+test("a table a server route reads is in the snapshot, not only in a migration", async () => {
+  // This file is a full snapshot, not an opening move: it already carries every
+  // table 05/06/08 introduced, and a project created from it has never run those.
+  // So a table written only in a numbered migration is a table a fresh install
+  // does not have - which is how the push tables were nearly shipped: they were
+  // in 09-push-subscriptions.sql, correct for the databases that already exist
+  // and useless for the ones created from here.
+  const schema = await read(SCHEMA);
+  const serverCode = await read(
+    new URL("../src/lib/push-server.ts", import.meta.url),
+  );
+  const tables = new Set(
+    [...serverCode.matchAll(/"(push_subscriptions|push_deliveries)"/g)].map(
+      (m) => m[1],
+    ),
+  );
+  assert.ok(tables.size > 0, "the fixture found no table names, so it is testing nothing");
+  for (const table of tables) {
+    assert.match(
+      schema,
+      new RegExp(`create table if not exists public\\.${table}\\b`, "i"),
+      `public.${table} is read by a server route but is not in schema.sql, so a fresh project does not have it`,
+    );
+    assert.match(
+      schema,
+      new RegExp(`alter table public\\.${table}\\s+enable row level security`, "i"),
+      `public.${table} has no RLS in schema.sql`,
     );
   }
 });
