@@ -47,6 +47,18 @@ export type RingingEvent = { event: SubjectEvent; at: number };
 /** Long enough to catch a snooze ending, short enough to survive a clock change. */
 const MAX_SLEEP = 15 * 60_000;
 
+/**
+ * Notification options the DOM types do not declare yet.
+ *
+ * `vibrate` and `renotify` are honoured by Chromium on Android, which is exactly
+ * where an alarm has to be felt as well as seen - and a heads-up notification is
+ * also the thing that makes an operating system light the screen.
+ */
+type AlarmNotification = NotificationOptions & {
+  renotify?: boolean;
+  vibrate?: number[];
+};
+
 export function useEventAlarms() {
   const { session } = useAuth();
   const who = session?.id ?? "";
@@ -143,11 +155,15 @@ export function useEventAlarms() {
           "Notification" in window &&
           Notification.permission === "granted"
         ) {
-          new Notification(next.title, {
+          const options: AlarmNotification = {
             body: [next.subject_key, next.start_time].filter(Boolean).join(" · "),
             tag: alarmKey(next),
             requireInteraction: true,
-          });
+            renotify: true,
+            silent: false,
+            vibrate: [400, 150, 400, 150, 400],
+          };
+          new Notification(next.title, options);
         }
       } catch {
         /* a notification is a bonus, not the alarm */

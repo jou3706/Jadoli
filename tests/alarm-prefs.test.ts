@@ -10,10 +10,10 @@ import {
   subscribeAlarmPrefs,
 } from "../src/lib/alarm-prefs.ts";
 
-test("both switches start off, because a browser must be asked first", () => {
+test("all three switches start off, because a browser must be asked first", () => {
   browserStorage.clear();
   resetAlarmPrefs();
-  assert.deepEqual(getAlarmPrefs(), { sound: false, notifications: false });
+  assert.deepEqual(getAlarmPrefs(), { sound: false, notifications: false, wake: false });
   assert.equal(soundEnabled(), false);
   assert.equal(notificationsEnabled(), false);
 });
@@ -31,13 +31,18 @@ test("a switch stays where it was left, across a reload", () => {
   assert.equal(soundEnabled(), false);
 });
 
-test("the two switches are independent", () => {
+test("the three switches are independent", () => {
   browserStorage.clear();
   resetAlarmPrefs();
   setAlarmPref("sound", true);
-  assert.deepEqual(getAlarmPrefs(), { sound: true, notifications: false });
+  assert.deepEqual(getAlarmPrefs(), { sound: true, notifications: false, wake: false });
   setAlarmPref("notifications", true);
-  assert.deepEqual(getAlarmPrefs(), { sound: true, notifications: true });
+  setAlarmPref("wake", true);
+  assert.deepEqual(getAlarmPrefs(), { sound: true, notifications: true, wake: true });
+
+  // Turning one off must not quietly turn another off with it.
+  setAlarmPref("sound", false);
+  assert.deepEqual(getAlarmPrefs(), { sound: false, notifications: true, wake: true });
 });
 
 test("listeners hear every change, and stop when unsubscribed", () => {
@@ -63,8 +68,8 @@ test("junk in storage reads as off, never as on", () => {
     resetAlarmPrefs();
     assert.deepEqual(
       getAlarmPrefs(),
-      { sound: false, notifications: false },
-      `for ${junk}`,
+      { sound: false, notifications: false, wake: false },
+      "for " + junk,
     );
   }
 });

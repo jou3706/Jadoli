@@ -16,11 +16,13 @@ export type AlarmPrefs = {
   sound: boolean;
   /** Show browser notifications. */
   notifications: boolean;
+  /** Hold the screen awake so an alarm that comes is an alarm that is seen. */
+  wake: boolean;
 };
 
 const KEY = "jadoli:alarm-prefs";
 
-const OFF: AlarmPrefs = { sound: false, notifications: false };
+const OFF: AlarmPrefs = { sound: false, notifications: false, wake: false };
 
 /**
  * Cached, and deliberately so: `useSyncExternalStore` compares the snapshot by
@@ -36,7 +38,11 @@ const read = (): AlarmPrefs => {
     const raw = typeof localStorage === "undefined" ? null : localStorage.getItem(KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<AlarmPrefs>;
-      next = { sound: parsed.sound === true, notifications: parsed.notifications === true };
+      next = {
+        sound: parsed.sound === true,
+        notifications: parsed.notifications === true,
+        wake: parsed.wake === true,
+      };
     }
   } catch {
     next = OFF;

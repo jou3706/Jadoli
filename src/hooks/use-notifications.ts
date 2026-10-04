@@ -41,6 +41,12 @@ const writeNotified = (keys: Set<string>, today: string): void => {
 };
 
 /**
+ * `vibrate` is honoured by Chromium on Android - the place where a reminder has
+ * to be felt as well as seen - but the DOM types do not declare it.
+ */
+type ReminderNotification = NotificationOptions & { vibrate?: number[] };
+
+/**
  * The bell in the header: a real switch, with a memory.
  *
  * Turning it on asks the browser for permission, says so, and shows one
@@ -88,10 +94,13 @@ export function useNotifications(
       if (notified.current.has(key)) continue;
       notified.current.add(key);
       try {
-        new Notification(l.subject_name, {
+        const reminder: ReminderNotification = {
           body: `${l.hall || ""} · ${l.start_time} – ${l.end_time}`,
           tag: key,
-        });
+          silent: false,
+          vibrate: [200, 100, 200],
+        };
+        new Notification(l.subject_name, reminder);
       } catch {
         /* notification failed silently — not critical */
       }

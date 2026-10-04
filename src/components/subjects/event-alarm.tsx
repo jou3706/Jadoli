@@ -12,6 +12,7 @@ import { previewChime, soundSupported, unlockSound } from "@/lib/alarm-sound";
 import { setAlarmPref } from "@/lib/alarm-prefs";
 import { useAlarmPrefs } from "@/hooks/use-alarm-prefs";
 import { useEventAlarms } from "@/hooks/use-event-alarms";
+import { useScreenWake } from "@/hooks/use-screen-wake";
 
 /** "in 58 minutes", counting down while it rings. */
 function liveCountdown(target: number, now: number) {
@@ -163,6 +164,9 @@ export function AlarmOverlay({
  */
 export function EventAlarms() {
   const { ringing, now, stop, snooze, enableSound, unlocked } = useEventAlarms();
+  // The one place the screen is held awake. It lives with the alarm rather than
+  // with the header because an alarm you cannot see is not an alarm.
+  useScreenWake();
 
   // Nothing shown until it is wanted: an app that has to be dismissed before it
   // is used is an app that gets dismissed.

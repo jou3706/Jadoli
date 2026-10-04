@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/db/auth";
 import { useList, useOffline } from "@/lib/db/store";
 import { useNotifications } from "@/hooks/use-notifications";
 import { AlarmSoundToggle } from "@/components/subjects/event-alarm";
+import { ScreenWakeToggle } from "./screen-wake-toggle";
 import { useScheduleContext } from "@/lib/schedule-context";
 import { nowCairo } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -208,6 +209,8 @@ export function Header({
             allow the first while refusing the second until it has been asked.
           */}
           <AlarmSoundToggle />
+
+          <ScreenWakeToggle />
 
           <div className="hidden items-center gap-1 lg:flex">
             <ThemeToggle variant="ghost" />
