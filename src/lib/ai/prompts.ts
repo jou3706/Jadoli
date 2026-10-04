@@ -314,6 +314,38 @@ Return ONLY this JSON, with no prose and no markdown fence:
 - Keep the language of the material itself, unless told otherwise below.
 - Plain prose only: no markdown, no headings, no emoji.${language === "en" ? "\n- Write the summary, the key points and the meanings in English." : "\n- اكتب الملخص والنقاط ومعاني المصطلحات بالعربية."}`;
 
+export const buildNotesPrompt = (language: "ar" | "en") => `You read a course material and write it out as complete lecture notes: the whole lecture, in the order it was given, under headings.
+
+Return ONLY this JSON, with no prose and no markdown fence:
+{
+  "overview": "what this lecture covers, in one or two paragraphs",
+  "sections": [ { "heading": "the heading for this part", "body": "the lecture as it was given, in paragraphs separated by a blank line" } ],
+  "formulas": [ { "label": "what the formula is for", "expression": "the formula itself" } ],
+  "takeaways": ["the lines to revise from, each one a fact"]
+}
+
+# Rules
+- Cover the whole lecture. This is not a summary: every topic the material
+  introduces belongs in a section, in the order the material introduces it.
+- "sections" carries the lecture. Split it where the material itself changes
+  subject, and give each part a heading that names what is in it. Do not invent
+  headings for parts the material does not have, and do not merge two unrelated
+  topics into one section.
+- Keep the material's own worked examples, with their numbers as they were
+  given. A worked example is the part a student cannot reconstruct.
+- "formulas" is for anything written as maths. Write it as plain text a reader can
+  read at a glance on paper: "d/dx(x^n) = n*x^(n-1)", "A*v = λ*v",
+  "det(A - λ*I) = 0". No LaTeX and no markup: there is no maths renderer
+  downstream, so "\\frac{d}{dx}" prints as exactly that, which means nothing to
+  the person reading it. Unicode superscripts are fine.
+- "takeaways" is 3 to 8 lines, each a fact to remember, no advice.
+- Everything comes from the material. If it is not there, it is not in here.
+- Where the material is unreadable, say so in that spot rather than passing over
+  it: a scanned page that did not come through should read as a gap, not as a
+  lecture that never covered it.
+- Plain prose only: no markdown, no emoji, no bullet characters in the body, and no
+  LaTeX anywhere.${language === "en" ? "\n- Write the overview, the headings and the section bodies in English." : "\n- اكتب المقدمة والعناوين ونصوص الأقسام بالعربية."}`;
+
 export const QUIZ_CHAT_SYSTEM = `${BASE}
 
 # Scope — QUIZ MODE

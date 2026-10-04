@@ -21,6 +21,7 @@ import { Input } from "@/components/ui/input";
 import { detectKind, kindMeta, pickerMaterials, safeUrl, sharedFileCounts, type MaterialKindId } from "@/lib/materials";
 import { SyllabusDialog } from "@/components/subjects/syllabus-dialog";
 import { SummaryButton } from "@/components/subjects/summary-button";
+import { NotesButton } from "@/components/subjects/notes-button";
 import { formatBytes, removeStoredFile } from "@/lib/db/storage";
 import { AddMaterialRow } from "@/components/subjects/add-material-row";
 import { cn } from "@/lib/utils";
@@ -68,10 +69,10 @@ export function MaterialRow({
       if (material.file_path && !fileShared) {
         await removeStoredFile(material.file_path).catch(() => {});
       }
-      toast({ title: tr("Ø§ØªØ­Ø°ÙØª Ø§Ù„Ù…Ø§Ø¯Ø©", "Material deleted") });
+      toast({ title: tr("اتحذفت المادة", "Material deleted") });
     } catch (e) {
       toast({
-        title: tr("Ù…Ù‚Ø¯Ø±Ù†Ø§Ø´ Ù†Ø­Ø°Ù", "Could not delete"),
+        title: tr("مقدرناش نحذف", "Could not delete"),
         description: e instanceof Error ? e.message : undefined,
         variant: "destructive",
       });
@@ -111,7 +112,7 @@ export function MaterialRow({
         )}
         <p className="truncate text-xs text-muted-foreground" dir="ltr">
           {href || material.url}
-          {material.size > 0 && ` Â· ${formatBytes(material.size)}`}
+          {material.size > 0 && ` · ${formatBytes(material.size)}`}
         </p>
       </div>
 
@@ -120,13 +121,14 @@ export function MaterialRow({
             the student's own storage, and a link has no file behind it. */}
         {material.file_path && kindId !== "video" && (
           <>
+            <NotesButton material={material} />
             <SummaryButton material={material} />
             <Button
               size="icon"
               variant="ghost"
               className="h-8 w-8"
-              aria-label={tr("Ø§Ø³ØªØ®Ø±Ø¬ Ø§Ù„Ù…ÙˆØ§Ø¹ÙŠØ¯", "Extract dates")}
-              title={tr("Ø§Ø³ØªØ®Ø±Ø¬ Ù…ÙˆØ§Ø¹ÙŠØ¯ Ø§Ù„Ø§Ù…ØªØ­Ø§Ù†Ø§Øª Ù…Ù† Ø§Ù„Ù…Ù„Ù", "Pull exam dates out of this file")}
+              aria-label={tr("استخرج المواعيد", "Extract dates")}
+              title={tr("استخرج مواعيد الامتحانات من الملف", "Pull exam dates out of this file")}
               onClick={() => setDates(true)}
             >
               <CalendarPlus className="h-3.5 w-3.5" />
@@ -139,13 +141,13 @@ export function MaterialRow({
           size="icon"
           variant="ghost"
           className="h-8 w-8"
-          aria-label={tr("Ø§Ù†Ø³Ø®", "Copy")}
+          aria-label={tr("انسخ", "Copy")}
           onClick={() =>
                 void navigator.clipboard
                   .writeText(href)
-                  .then(() => toast({ title: tr("Ø§ØªÙ†Ø³Ø®", "Copied") }))
+                  .then(() => toast({ title: tr("اتنسخ", "Copied") }))
                   .catch(() =>
-                    toast({ title: tr("Ù…Ù‚Ø¯Ø±ØªØ´ Ø£Ù†Ø³Ø®", "Copy failed"), variant: "destructive" }),
+                    toast({ title: tr("مقدرتش أنسخ", "Copy failed"), variant: "destructive" }),
                   )
               }
             >
@@ -155,7 +157,7 @@ export function MaterialRow({
               size="icon"
               variant="ghost"
               className="h-8 w-8"
-              aria-label={tr("Ø§ÙØªØ­", "Open")}
+              aria-label={tr("افتح", "Open")}
               onClick={() => window.open(href, "_blank", "noopener,noreferrer")}
             >
               <ExternalLink className="h-3.5 w-3.5" />
@@ -166,7 +168,7 @@ export function MaterialRow({
           size="icon"
           variant="ghost"
           className="h-8 w-8"
-          aria-label={tr("Ø¥Ø¹Ø§Ø¯Ø© ØªØ³Ù…ÙŠØ©", "Rename")}
+          aria-label={tr("إعادة تسمية", "Rename")}
           onClick={() => {
             setTitle(material.title);
             setRenaming(true);
@@ -179,7 +181,7 @@ export function MaterialRow({
           variant="ghost"
           className="h-8 w-8 text-destructive"
           disabled={busy}
-          aria-label={tr("Ø§Ø­Ø°Ù Ø§Ù„Ù…Ø§Ø¯Ø©", "Delete material")}
+          aria-label={tr("احذف المادة", "Delete material")}
           onClick={() => void del()}
         >
           <Trash2 className="h-3.5 w-3.5" />
@@ -242,7 +244,7 @@ export function SubjectMaterialsDialog({
     if (!clean) {
       setError(
         tr(
-          "Ø§Ù„Ù„ÙŠÙ†Ùƒ Ù„Ø§Ø²Ù… ÙŠØ¨Ø¯Ø£ Ø¨Ù€ http:// Ø£Ùˆ https://",
+          "اللينك لازم يبدأ بـ http:// أو https://",
           "The link must start with http:// or https://",
         ),
       );
@@ -260,7 +262,7 @@ export function SubjectMaterialsDialog({
           <DialogHeader className="border-b p-4 pb-3">
             <DialogTitle className="font-heading text-2xl">{name}</DialogTitle>
             <p className="text-sm text-muted-foreground">
-              {materials.length} {tr("Ù…Ø§Ø¯Ø© Ø¯Ø±Ø§Ø³ÙŠØ©", "materials")}
+              {materials.length} {tr("مادة دراسية", "materials")}
             </p>
           </DialogHeader>
 
@@ -268,8 +270,8 @@ export function SubjectMaterialsDialog({
             {materials.length === 0 ? (
               <p className="p-8 text-center text-sm text-muted-foreground">
                 {tr(
-                  "Ù„Ø³Ù‡ Ù…ÙÙŠØ´ Ù…ÙˆØ§Ø¯ ÙÙŠ Ù‡Ø°Ù‡ Ø§Ù„Ù…Ø§Ø¯Ø©. Ø§Ø³Ø­Ø¨ Ù…Ù„Ù Ø£Ùˆ Ø§Ù„ØµÙ‚ Ù„ÙŠÙ†Ùƒ.",
-                  "No materials yet â€” drop a file or paste a link.",
+                  "لسه مفيش مواد في هذه المادة. اسحب ملف أو الصق لينك.",
+                  "No materials yet — drop a file or paste a link.",
                 )}
               </p>
             ) : (
@@ -312,13 +314,13 @@ export function SubjectMaterialsDialog({
                   dir="ltr"
                   inputMode="url"
                   placeholder="https://"
-                  aria-label={tr("Ø§Ù„Ù„ÙŠÙ†Ùƒ", "Link")}
+                  aria-label={tr("اللينك", "Link")}
                   className="h-9"
                 />
                 {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
               </div>
               <Button type="submit" size="sm" className="h-9 shrink-0">
-                {tr("Ø¶ÙŠÙ", "Add")}
+                {tr("ضيف", "Add")}
               </Button>
             </form>
           </div>

@@ -1,6 +1,7 @@
-import { test } from "node:test";
+﻿import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildSummaryDoc, isEmptyDoc, summaryFileName } from "../src/lib/summary-doc.ts";
+import { buildSummaryDoc } from "../src/lib/summary-doc.ts";
+import { isEmptyDoc } from "../src/lib/print-doc.ts";
 import type { MaterialSummary } from "../src/lib/ai/summary.ts";
 
 const sum = (over: Partial<MaterialSummary> = {}): MaterialSummary => ({
@@ -118,47 +119,3 @@ test("the course is a subtitle and is optional", () => {
   assert.equal(withCourse.course, "Applied Math");
 });
 
-test("a file name a Windows machine will accept", () => {
-  // Course titles are full of exactly these characters, and jsPDF passes the
-  // name straight to the browser's download.
-  assert.equal(summaryFileName('Week 1/2: intro*'), "Week 1 2 intro.pdf");
-  assert.equal(summaryFileName('a<b>c|d"e"f?g*h'), "a b c d e f g h.pdf");
-});
-
-test("punctuation a file name may keep is kept", () => {
-  // Only the characters Windows actually refuses are replaced. The Arabic
-  // question mark is a different character from `?` and is perfectly legal, so
-  // stripping it would be mangling a title for no reason.
-  assert.equal(summaryFileName("محاضرة 3 - مراجعة؟"), "محاضرة 3 - مراجعة؟.pdf");
-  assert.equal(summaryFileName("مقدمة: الفصل الأول"), "مقدمة الفصل الأول.pdf");
-});
-
-test("a title that came from a file name does not get two extensions", () => {
-  // Materials are titled after the file they came from (`title: file.name`), so
-  // this is the normal case, not an edge case.
-  assert.equal(summaryFileName("Lecture-3.pdf"), "Lecture-3.pdf");
-  assert.equal(summaryFileName("محاضرة 3.pdf"), "محاضرة 3.pdf");
-  assert.equal(summaryFileName("Week 1.pptx"), "Week 1.pdf");
-  assert.equal(summaryFileName("notes (2).PDF"), "notes (2).pdf");
-});
-
-test("a dot that is part of the title is not an extension", () => {
-  // "v1.2" and "Q1. Final Exam" are titles, not files with extensions.
-  assert.equal(summaryFileName("Revision v1.2"), "Revision v1.2.pdf");
-  assert.equal(summaryFileName("Q1. Final Exam"), "Q1. Final Exam.pdf");
-  assert.equal(summaryFileName("Applied Math."), "Applied Math.pdf");
-  assert.equal(summaryFileName("Applied Math  "), "Applied Math.pdf");
-});
-
-test("a file name with nothing usable in it still gets an extension", () => {
-  assert.equal(summaryFileName(""), "summary.pdf");
-  assert.equal(summaryFileName("///"), "summary.pdf");
-  assert.equal(summaryFileName("...."), "summary.pdf");
-  assert.equal(summaryFileName(".pdf"), "summary.pdf");
-});
-
-test("a file name that is too long loses its length, not its extension", () => {
-  const name = summaryFileName("x".repeat(400));
-  assert.ok(name.length <= 124, `too long: ${name.length}`);
-  assert.ok(name.endsWith(".pdf"));
-});
