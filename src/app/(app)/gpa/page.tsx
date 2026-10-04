@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Field, Input, Select } from "@/components/ui/input";
+import { GpaWhatIf } from "@/components/gpa/what-if";
 import { cn } from "@/lib/utils";
 import type { Grade } from "@/lib/db/types";
 
@@ -336,6 +337,8 @@ export default function GpaPage() {
           </p>
         </div>
       </div>
+
+      <GpaWhatIf />
 
       {stats.hours > 0 && (
         <div className="rounded-2xl border p-4">
