@@ -49,7 +49,6 @@ const SHELL = [
   "/attendance",
   "/subjects",
   "/review",
-  "/halls",
   "/import",
   "/assistant",
   "/widget",

@@ -35,16 +35,6 @@ export type Grade = {
   semester: string;
 };
 
-export type Hall = {
-  id: Id;
-  name: string;
-  campus: string;
-  lat: number | null;
-  lng: number | null;
-  note: string;
-  streetview_url: string;
-};
-
 export type Material = {
   id: Id;
   title: string;
@@ -212,7 +202,6 @@ export type EntityMap = {
   Lecture: Lecture;
   Attendance: Attendance;
   Grade: Grade;
-  Hall: Hall;
   Material: Material;
   Subject: Subject;
   SubjectEvent: SubjectEvent;
@@ -230,7 +219,6 @@ export const ENTITY_NAMES: EntityName[] = [
   "Lecture",
   "Attendance",
   "Grade",
-  "Hall",
   "Material",
   "Subject",
   "SubjectEvent",

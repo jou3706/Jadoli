@@ -1,14 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { Bell, CalendarClock, MapPin, User } from "lucide-react";
+import { Bell, MapPin, User } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { useList } from "@/lib/db/store";
 import { lectureSubtitle, lectureTitle, type NextResult } from "@/lib/schedule";
-import { countdown, nowCairo } from "@/lib/utils";
+import { cn, countdown, nowCairo } from "@/lib/utils";
 import { colorStyle } from "@/lib/constants";
-import { cn } from "@/lib/utils";
 
 /** Live/upcoming lecture with a ticking countdown. */
 export function NextCard({ next }: { next: NonNullable<NextResult> }) {
@@ -124,10 +122,7 @@ export function CountdownCard({
   if (delta < 0 || delta > 120) return null;
 
   return (
-    <Link
-      href="/halls"
-      className="flex items-center gap-3 rounded-2xl border border-primary/30 bg-primary/5 p-3"
-    >
+    <div className="flex items-center gap-3 rounded-2xl border border-primary/30 bg-primary/5 p-3">
       <Bell className="h-5 w-5 shrink-0 text-primary" />
       <div className="min-w-0">
         <p className="truncate text-sm font-semibold">{l.subject_name}</p>
@@ -137,7 +132,12 @@ export function CountdownCard({
             : tr(`يبدأ بعد ${delta} دقيقة`, `Starts in ${delta} min`)}
         </p>
       </div>
-      <CalendarClock className="ms-auto h-4 w-4 shrink-0 text-primary" />
-    </Link>
+      {l.hall && (
+        <span className="ms-auto flex shrink-0 items-center gap-1.5 text-xs text-primary">
+          <MapPin className="h-3.5 w-3.5" />
+          {l.hall}
+        </span>
+      )}
+    </div>
   );
 }

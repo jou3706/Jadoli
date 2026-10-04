@@ -118,7 +118,7 @@ async function boot(
     // route outside SHELL is distinguishable by its body.
     const SHELL_ROUTE =
       path === "/" ||
-      /^\/(login|register|forgot-password|reset-password|week|gpa|events|attendance|subjects|halls|import|assistant|widget|manifest\.json|icon\.svg)$/.test(
+      /^\/(login|register|forgot-password|reset-password|week|gpa|events|attendance|subjects|import|assistant|widget|manifest\.json|icon\.svg)$/.test(
         path,
       );
     if (SHELL_ROUTE) {
@@ -396,7 +396,6 @@ test("every route the app can open is reachable offline", async () => {
     "/events",
     "/attendance",
     "/subjects",
-    "/halls",
     "/import",
     "/assistant",
     "/widget",

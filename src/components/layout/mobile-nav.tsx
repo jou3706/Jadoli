@@ -122,7 +122,7 @@ export function MobileSearch() {
       <Input
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        placeholder={tr("ابحث في المواد والدكاترة والقاعات…", "Search subjects, doctors, halls…")}
+        placeholder={tr("ابحث في المواد والدكاترة…", "Search subjects, doctors…")}
         className="h-10 bg-card ps-9"
       />
     </div>

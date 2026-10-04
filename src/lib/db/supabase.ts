@@ -26,7 +26,6 @@ const TABLES: Record<EntityName, string> = {
   Lecture: "lectures",
   Attendance: "attendance",
   Grade: "grades",
-  Hall: "halls",
   Material: "materials",
 Subject: "subjects",
   SubjectEvent: "subject_events",

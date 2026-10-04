@@ -52,19 +52,6 @@ create table if not exists public.grades (
   updated_date  timestamptz not null default now()
 );
 
-create table if not exists public.halls (
-  id              uuid primary key default gen_random_uuid(),
-  user_id         uuid not null references auth.users on delete cascade,
-  name            text not null default '',
-  campus          text not null default '',
-  lat             double precision,
-  lng             double precision,
-  note            text not null default '',
-  streetview_url  text not null default '',
-  created_date    timestamptz not null default now(),
-  updated_date    timestamptz not null default now()
-);
-
 create table if not exists public.materials (
   id            uuid primary key default gen_random_uuid(),
   user_id       uuid not null references auth.users on delete cascade,
@@ -276,7 +263,7 @@ declare
   t text;
 begin
   foreach t in array array[
-    'lectures','attendance','grades','halls','materials','subjects',
+    'lectures','attendance','grades','materials','subjects',
     'subject_events','university_events','flashcards','review_sessions',
     'questions','chats','messages'
   ]
@@ -297,7 +284,6 @@ $$;
 alter table public.lectures          enable row level security;
 alter table public.attendance        enable row level security;
 alter table public.grades            enable row level security;
-alter table public.halls             enable row level security;
 alter table public.materials         enable row level security;
 alter table public.subjects          enable row level security;
 alter table public.subject_events    enable row level security;
@@ -313,7 +299,7 @@ declare
   t text;
 begin
   foreach t in array array[
-    'lectures','attendance','grades','halls','materials','subjects',
+    'lectures','attendance','grades','materials','subjects',
     'subject_events','university_events','flashcards','review_sessions',
     'questions','chats','messages'
   ]
