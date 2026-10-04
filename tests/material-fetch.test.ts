@@ -222,6 +222,20 @@ test("every failure reason has a message the student can act on", async () => {
 
 test("the dialog sends the token the route needs to read the file", async () => {
   const text = await dialogSrc();
-  assert.match(text, /getSession\(\)/);
-  assert.match(text, /Authorization.*Bearer|access_token/);
+  // It used to carry its own copy of this helper, which is how a second copy
+  // ended up not being called on some other call site. The token is read in one
+  // place now, so all this has to do is use it.
+  assert.match(
+    text,
+    /import \{ authHeader \} from "@\/lib\/db\/supabase-client"/,
+    "the dialog does not use the shared authHeader",
+  );
+  assert.match(text, /authHeader\(\)/, "the dialog fetches without sending the token");
+  // And the shared helper is the one that reads the session and builds the header.
+  const shared = await readFile(
+    new URL("../src/lib/db/supabase-client.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(shared, /getSession\(\)/);
+  assert.match(shared, /Authorization.*Bearer|access_token/);
 });

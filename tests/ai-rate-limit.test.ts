@@ -230,3 +230,123 @@ test("the allowance is documented, not a buried default", async () => {
   const env = await read("../.env.example");
   assert.match(env, /AI_RATE_LIMIT_PER_HOUR/, ".env.example does not document the limit");
 });
+
+/**
+ * The other half of the same mistake.
+ *
+ * Requiring a token on the server is only half the change: every caller in the
+ * browser has to send one, and a caller that does not is now a 401 with nothing
+ * to point at. The first pass at this checked the routes and missed three call
+ * sites, so the chat, the timetable import and the cover all answered
+ * UNAUTHENTICATED. Nothing in a route-level test can see that, because the missing
+ * header is on the other side of the wire.
+ *
+ * So this reads the browser side: a POST to a guarded route must carry the token.
+ */
+test("every guarded route has a browser caller, and that caller sends the token", async () => {
+  // Two shapes reach these routes. Most post to a literal "/api/ai/...", but the
+  // summary and notes buttons go through the shared read() helper and pass the
+  // route as an argument, so the fetch itself says only `fetch(route)`. Checking
+  // one shape misses the other, which is how three of these call sites shipped
+  // without a token.
+  const files = await collectClientFetchers();
+
+  for (const name of AI_ROUTES) {
+    const literal = `/api/ai/${name}`;
+
+    const direct = files.filter((f) => f.route.startsWith(literal) && f.method === "POST");
+    if (direct.length > 0) {
+      for (const { rel, text, headersAt } of direct) {
+        assert.ok(
+          /authHeader\(\)/.test(text.slice(headersAt, headersAt + 400)),
+          `${rel} posts to ${literal} with no Authorization header, so the route answers UNAUTHENTICATED`,
+        );
+      }
+      continue;
+    }
+
+    // No literal caller, so it must be passed to the shared read() helper, which
+    // is what summary and notes do.
+    const helper = await read("../src/components/print/material-read.ts");
+    const every = await collectBrowserFiles();
+    assert.ok(
+      every.some((f) => f.text.includes(`"${literal}"`)),
+      `nothing in the browser calls ${literal}: no literal caller and not passed to the shared read()`,
+    );
+    const fetchAt = helper.indexOf("await fetch(");
+    assert.ok(fetchAt > 0, "the shared read() no longer calls fetch");
+    assert.match(
+      helper.slice(fetchAt, fetchAt + 400),
+      /authHeader\(\)/,
+      `read() posts to ${literal} for the summary and notes buttons without sending the token`,
+    );
+  }
+});
+
+test("the token helper exists in exactly one place", async () => {
+  // It was written out a second time inside the cards dialog. Two copies is how
+  // one of them ends up not being called on a new call site.
+  const files = await collectClientFetchers();
+  const definitions = files.filter((f) =>
+    /async function authHeader|const authHeader\s*=|function authHeader/.test(f.text),
+  );
+  assert.deepEqual(
+    definitions.map((f) => f.rel),
+    [],
+    `authHeader is defined outside supabase-client: ${definitions.map((f) => f.rel).join(", ")}`,
+  );
+});
+
+/** Every browser-side file, whether or not it calls fetch. */
+async function collectBrowserFiles() {
+  const roots = ["../src/app", "../src/components"];
+  const out: { rel: string; text: string }[] = [];
+  for (const root of roots) {
+    for (const rel of await walk(root)) {
+      out.push({ rel, text: await read(rel) });
+    }
+  }
+  return out;
+}
+
+/** Every `fetch("/api/...")` in the browser code, with where its headers are. */
+async function collectClientFetchers() {
+  const found: {
+    rel: string;
+    text: string;
+    route: string;
+    method: string;
+    headersAt: number;
+  }[] = [];
+
+  for (const { rel, text } of await collectBrowserFiles()) {
+    // Every occurrence, not just the first: the assistant page posts to the same
+    // route twice and only one of them had the header.
+    for (const m of text.matchAll(/fetch\(\s*[`"'](\/api\/[^`"']*)[`"']/g)) {
+      const route = m[1];
+      const start = m.index ?? 0;
+      const headersAt = text.indexOf("headers", start);
+      const segment = text.slice(start, start + 600);
+      found.push({
+        rel,
+        text,
+        route,
+        method: /method:\s*"POST"/.test(segment) ? "POST" : "OTHER",
+        headersAt: headersAt >= 0 && headersAt < start + 600 ? headersAt : start,
+      });
+    }
+  }
+  return found;
+}
+
+/** Files under a directory, as paths relative to the repo root. */
+async function walk(rel: string): Promise<string[]> {
+  const { readdir } = await import("node:fs/promises");
+  const out: string[] = [];
+  for (const entry of await readdir(new URL(rel, import.meta.url), { withFileTypes: true })) {
+    const child = `${rel}/${entry.name}`;
+    if (entry.isDirectory()) out.push(...(await walk(child)));
+    else if (/\.tsx?$/.test(entry.name)) out.push(child);
+  }
+  return out;
+}

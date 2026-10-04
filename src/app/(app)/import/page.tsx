@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { useList, useMutate } from "@/lib/db/store";
+import { authHeader } from "@/lib/db/supabase-client";
 import { dayName, LECTURE_COLORS } from "@/lib/constants";
 import { formatTime } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
@@ -122,7 +123,9 @@ export default function ImportPage() {
     try {
       const res = await fetch("/api/ai/import", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        // This route reads no file, so nothing else here would identify the
+        // caller: without the token it refuses, and the import never runs.
+        headers: { "Content-Type": "application/json", ...(await authHeader()) },
         body: JSON.stringify({
           images: files.map((f) => ({
             dataUrl: f.uri,

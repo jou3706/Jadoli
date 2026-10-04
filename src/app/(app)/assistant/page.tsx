@@ -338,7 +338,9 @@ export default function AssistantPage() {
     try {
       const res = await fetch("/api/ai/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        // The route refuses anyone it cannot identify, so this has to be here on
+        // every call that costs a key - not only the ones that read a file.
+        headers: { "Content-Type": "application/json", ...(await authHeader()) },
         body: JSON.stringify({
           model,
           mode,

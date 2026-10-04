@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { BookOpen, FileText, Loader2, Sparkles, X } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
-import { getSupabase } from "@/lib/db/supabase-client";
+import { authHeader } from "@/lib/db/supabase-client";
 import { useList, useMutate } from "@/lib/db/store";
 import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
@@ -56,24 +56,6 @@ import type { Material } from "@/lib/db/types";
 const COUNT_CHOICES = [5, 10, 15, 20];
 
 type Draft = GeneratedCard & { keep: boolean };
-
-/**
- * The signed-in student's token, for the route to read their own files with.
- *
- * Empty when the app runs local-first, which is also when there is no bucket and
- * therefore no uploaded file to read.
- */
-async function authHeader(): Promise<Record<string, string>> {
-  const sb = getSupabase();
-  if (!sb) return {};
-  try {
-    const { data } = await sb.auth.getSession();
-    const token = data.session?.access_token;
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  } catch {
-    return {};
-  }
-}
 
 export function GenerateCardsDialog({
   open,

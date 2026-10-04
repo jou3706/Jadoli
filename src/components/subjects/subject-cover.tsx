@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ImageIcon, Loader2, Sparkles, Trash2 } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
+import { authHeader } from "@/lib/db/supabase-client";
 import { useToast } from "@/components/ui/toast";
 import { canStoreFiles, removeStoredFile, safeFileName, saveCoverImage } from "@/lib/db/storage";
 import { safeImageUrl, subjectCover } from "@/lib/subjects";
@@ -64,7 +65,9 @@ export function SubjectCoverTile({
     try {
       const res = await fetch("/api/ai/cover", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        // Generating a cover spends a Gemini image call, so the route asks who is
+        // asking before it starts.
+        headers: { "Content-Type": "application/json", ...(await authHeader()) },
         body: JSON.stringify({ subject: name }),
       });
       const data = (await res.json()) as { image?: string; error?: string };
