@@ -77,13 +77,43 @@ export function useChats() {
 
   const saveMessage = useCallback(
     async (chatId: Id, role: "user" | "assistant", text: string) => {
-      await msg.create({
+      return msg.create({
         chat_id: chatId,
         role,
         text: text.slice(0, MAX_TEXT),
       });
     },
     [msg],
+  );
+
+  /**
+   * Rewrites a question and drops everything that was answered after it.
+   *
+   * Editing a question and keeping the old answer would leave the thread
+   * disagreeing with itself: an answer to words nobody asked any more, sitting
+   * above the new one. So the reply and anything below it go, and the question
+   * keeps its own row rather than becoming a new message - otherwise the thread
+   * would show both the old wording and the new.
+   *
+   * Deletion is one row at a time rather than a filter because `messages` is
+   * already the ordered thread, so the rows to remove are known exactly. A filter
+   * on `created_date` would also take rows written in the same millisecond.
+   */
+  const rewriteMessage = useCallback(
+    async (messageId: Id, text: string) => {
+      await msg.update(messageId, { text: text.slice(0, MAX_TEXT) });
+      const index = (messages ?? []).findIndex((m: Message) => m.id === messageId);
+      if (index < 0) return;
+      const doomed = (messages ?? [])
+        .slice(index + 1)
+        .filter((m: Message) => m.chat_id === activeId);
+      for (const m of doomed) {
+        // Sequential on purpose: the offline queue and the store's change events
+        // both assume one write at a time.
+        await msg.remove(m.id).catch(() => {});
+      }
+    },
+    [msg, messages, activeId],
   );
 
   const deleteChat = useCallback(
@@ -108,6 +138,7 @@ export function useChats() {
     openChat,
     ensureChat,
     saveMessage,
+    rewriteMessage,
     deleteChat,
     renameChat,
   };

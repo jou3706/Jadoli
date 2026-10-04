@@ -9,6 +9,8 @@ import {
   Loader2,
   MessageSquarePlus,
   MessagesSquare,
+  Mic,
+  MicOff,
   Paperclip,
   Pencil,
   Send,
@@ -31,13 +33,15 @@ import {
 } from "@/lib/ai/schema";
 import { newQuestions, questionPayload } from "@/lib/quiz-bank";
 import { QuizBuilder } from "@/components/ai/quiz-builder";
+import { MessageActions, MessageEditor } from "@/components/ai/message-actions";
 import { QuizSession } from "@/components/review/quiz-session";
 import { MODELS, PROVIDER_ORDER, findModel, type ModelDef } from "@/lib/ai/models";
+import { useSpeechToText } from "@/lib/speech";
 import { nowCairo } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/input";
-import type { Attachment } from "@/lib/db/types";
+import type { Attachment, Id } from "@/lib/db/types";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_PDF_BYTES = 15 * 1024 * 1024;
@@ -117,10 +121,16 @@ export default function AssistantPage() {
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [totalKeys, setTotalKeys] = useState(0);
   const [showChats, setShowChats] = useState(false);
+  /** The question being rewritten in place, if any. */
+  const [editingId, setEditingId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const creatingRef = useRef(false);
+
+  // Dictation writes straight into the box below, which is why it takes the
+  // setter rather than a value it keeps to itself.
+  const speech = useSpeechToText((text) => setInput(text));
 
   const chats = useChats();
   // In-flight turns carry the streaming text and the applied-action badges;
@@ -301,25 +311,52 @@ export default function AssistantPage() {
     if (fileRef.current) fileRef.current.value = "";
   };
 
-  const send = async () => {
-    const question = input.trim();
+  /**
+   * Asks the question, and renders the exchange.
+   *
+   * Also the way a rewritten question is sent, so `base` and `history` can be
+   * given to it: an edit has to drop the answer that was written for the old
+   * wording, which means the thread it draws on is the part above the question
+   * rather than everything on screen. `persistUser` covers the other half - the
+   * edited row is rewritten in place instead of a second one being added beside it.
+   */
+  const send = async (opts?: {
+    question?: string;
+    base?: Turn[];
+    history?: { role: "user" | "assistant"; text: string }[];
+    keepAttachments?: Attachment[];
+    persistUser?: (chatId: Id) => Promise<void>;
+  }) => {
+    const question = (opts?.question ?? input).trim();
     if (!question || busy) return;
 
-    const attachments = images;
-    setInput("");
-    setImages([]);
+    const attachments = opts?.keepAttachments ?? images;
+    // An edit supplies its own text, so clearing the box would throw away
+    // whatever the student had started typing for their next question.
+    if (!opts) {
+      setInput("");
+      setImages([]);
+      // An open editor belongs to a question on screen; sending from the box
+      // below leaves it stranded with nothing to edit.
+      setEditingId(null);
+    }
     setBusy(true);
+    // Sending is a deliberate end to dictation, not a pause in it.
+    speech.stop();
 
-    const history = turns
-      .filter((t) => t.text.trim() && !t.error)
-      .slice(-16)
-      .map((t) => ({ role: t.role, text: t.text }));
+    const base: Turn[] = opts?.base ?? turns;
+    const history =
+      opts?.history ??
+      base
+        .filter((t) => t.text.trim() && !t.error)
+        .slice(-16)
+        .map((t) => ({ role: t.role, text: t.text }));
 
-    const base: Turn[] = [...turns];
+    const userId = crypto.randomUUID();
     const assistantId = crypto.randomUUID();
     setStreamed([
       ...base,
-      { id: crypto.randomUUID(), role: "user", text: question, images: attachments },
+      { id: userId, role: "user", text: question, images: attachments },
       { id: assistantId, role: "assistant", text: "" },
     ]);
 
@@ -328,7 +365,17 @@ export default function AssistantPage() {
     // "thread changed" effect does not clear the turn above.
     if (!chats.activeId) creatingRef.current = true;
     const chatId = await chats.ensureChat(question).catch(() => null);
-    if (chatId) await chats.saveMessage(chatId, "user", question).catch(() => {});
+    if (chatId) {
+      if (opts?.persistUser) {
+        await opts.persistUser(chatId).catch(() => {});
+      } else {
+        const row = await chats.saveMessage(chatId, "user", question).catch(() => null);
+        // Adopt the stored id, so this question can still be rewritten later. A
+        // turn drawn optimistically has an id the database has never seen, and
+        // editing one of those would look for a row that does not exist.
+        if (row?.id) patchTurn(userId, { id: row.id });
+      }
+    }
 
     const ac = new AbortController();
     abortRef.current = ac;
@@ -422,6 +469,60 @@ export default function AssistantPage() {
       abortRef.current = null;
     }
   };
+
+  /**
+ * Sends a rewritten question in place of the original one.
+ *
+ * The answer that was written for the old wording goes with it: leaving it would
+ * put a reply to words nobody asked any more directly above the new one.
+ */
+  const resendFrom = (index: number, text: string) => {
+    const target = turns[index];
+    if (!target || target.role !== "user" || busy) return;
+    const before = turns.slice(0, index);
+    const messageId = target.id;
+    setEditingId(null);
+    void send({
+      question: text,
+      base: before,
+      history: before
+        .filter((t) => t.text.trim() && !t.error)
+        .slice(-16)
+        .map((t) => ({ role: t.role, text: t.text })),
+      // Attachments were never written to the thread - only text is - so they
+      // come back from this turn while it is on screen and are simply gone after
+      // a reload. Asking again without the picture beats refusing to send.
+      keepAttachments: target.images,
+      persistUser: async () => {
+        await chats.rewriteMessage(messageId, text);
+      },
+    });
+  };
+
+  // Dictation fails in ways the student cannot see: a refused microphone, a
+  // machine with no input, the recogniser's service being down. Without saying so,
+  // the button just does nothing and looks broken.
+  useEffect(() => {
+    if (!speech.error) return;
+    const message =
+      speech.error === "not-allowed"
+        ? tr(
+            "الميكروفون مرفوض — اسمح بيه من إعدادات المتصفح",
+            "Microphone blocked — allow it in your browser settings",
+          )
+        : speech.error === "audio-capture"
+          ? tr("مالقيناش ميكروفون متصل", "No microphone found")
+          : speech.error === "unsupported"
+            ? tr(
+                "المتصفح ده مش بيدعم الإملاء — جرّب Chrome أو Safari",
+                "This browser cannot dictate — try Chrome or Safari",
+              )
+            : tr(
+                "الإملاء واقع دلوقتي — اتأكد من النت وجرّب تاني",
+                "Dictation is unavailable right now — check your connection and retry",
+              );
+    toast({ title: message, variant: "destructive" });
+  }, [speech.error, toast, tr]);
 
   return (
     <div className="flex h-[calc(100dvh-7.5rem)] flex-col gap-3">
@@ -520,6 +621,7 @@ export default function AssistantPage() {
             onClick={() => {
               chats.newChat();
               setStreamed(null);
+              setEditingId(null);
             }}
           >
             <MessageSquarePlus className="h-4 w-4" />
@@ -547,6 +649,7 @@ export default function AssistantPage() {
                     className="min-w-0 flex-1 truncate text-start text-sm"
                     onClick={() => {
                       setStreamed(null);
+                      setEditingId(null);
                       chats.openChat(c.id);
                     }}
                   >
@@ -570,6 +673,7 @@ export default function AssistantPage() {
                     aria-label={tr("امسح المحادثة", "Delete chat")}
                     onClick={() => {
                       setStreamed(null);
+                      setEditingId(null);
                       void chats.deleteChat(c.id);
                     }}
                   >
@@ -654,10 +758,12 @@ export default function AssistantPage() {
           </div>
         )}
 
-        {turns.map((t) => (
+        {turns.map((t, index) => (
           <div
             key={t.id}
-            className={t.role === "user" ? "ms-auto max-w-[85%] " : "me-auto max-w-[90%] "}
+            // `group` is what the actions row under each message watches, to
+            // come out of their quiet state when the message is pointed at.
+            className={`group ${t.role === "user" ? "ms-auto max-w-[85%] " : "me-auto max-w-[90%] "}`}
           >
             {t.quiz ? (
               <QuizSession
@@ -698,47 +804,76 @@ export default function AssistantPage() {
                 )}
               </div>
             ) : (
-            <div
-              className={
-                t.role === "user"
-                  ? "ms-auto w-fit rounded-2xl rounded-ee-sm bg-primary px-3 py-2 text-primary-foreground"
-                  : "rounded-2xl rounded-es-sm bg-muted px-3 py-2"
-              }
-            >
-              {t.images && t.images.length > 0 && (
-                <div className="mb-2 flex flex-wrap gap-1.5">
-                  {t.images.map((a, i) => (
-                    /* eslint-disable-next-line @next/next/no-img-element */
-                    <img
-                      key={i}
-                      src={a.uri}
-                      alt={a.name}
-                      className="h-20 w-20 rounded-lg object-cover"
-                    />
-                  ))}
-                </div>
-              )}
-              {t.text && <p className="whitespace-pre-wrap text-sm leading-relaxed">{t.text}</p>}
-              {!t.text && !t.error && t.role === "assistant" && (
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-              )}
-              {t.error && (
-                <p className="text-sm text-destructive">
-                  {tr("خطأ:", "Error:")} {t.error}
-                </p>
-              )}
-              {t.applied && t.applied.length > 0 && (
-                <ul className="mt-2 space-y-0.5 border-t pt-2 text-xs">
-                  {t.applied.map((a, i) => (
-                    <li
-                      key={i}
-                      className={a.ok ? "text-emerald-600" : "text-destructive"}
-                    >
-                      {a.ok ? <Check className="inline h-3 w-3" /> : <X className="inline h-3 w-3" />}{" "}
-                      {a.label}
-                    </li>
-                  ))}
-                </ul>
+            <div className="space-y-0.5">
+              <div
+                className={
+                  t.role === "user"
+                    ? "ms-auto w-fit rounded-2xl rounded-ee-sm bg-primary px-3 py-2 text-primary-foreground"
+                    : "rounded-2xl rounded-es-sm bg-muted px-3 py-2"
+                }
+              >
+                {t.images && t.images.length > 0 && (
+                  <div className="mb-2 flex flex-wrap gap-1.5">
+                    {t.images.map((a, i) => (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        key={i}
+                        src={a.uri}
+                        alt={a.name}
+                        className="h-20 w-20 rounded-lg object-cover"
+                      />
+                    ))}
+                  </div>
+                )}
+                {editingId === t.id ? (
+                  <MessageEditor
+                    initial={t.text}
+                    busy={busy}
+                    onCancel={() => setEditingId(null)}
+                    onSubmit={(next) => resendFrom(index, next)}
+                  />
+                ) : (
+                  t.text && (
+                    <p className="whitespace-pre-wrap text-sm leading-relaxed">{t.text}</p>
+                  )
+                )}
+                {!t.text && !t.error && t.role === "assistant" && editingId !== t.id && (
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                )}
+                {t.error && (
+                  <p className="text-sm text-destructive">
+                    {tr("خطأ:", "Error:")} {t.error}
+                  </p>
+                )}
+                {t.applied && t.applied.length > 0 && (
+                  <ul className="mt-2 space-y-0.5 border-t pt-2 text-xs">
+                    {t.applied.map((a, i) => (
+                      <li
+                        key={i}
+                        className={a.ok ? "text-emerald-600" : "text-destructive"}
+                      >
+                        {a.ok ? <Check className="inline h-3 w-3" /> : <X className="inline h-3 w-3" />}{" "}
+                        {a.label}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              {editingId !== t.id && !t.error && (
+                <MessageActions
+                  text={t.text}
+                  align={t.role === "user" ? "end" : "start"}
+                  // Only a question can be rewritten: an answer is the assistant's
+                  // to stand by until it is asked something different.
+                  onEdit={t.role === "user" ? () => setEditingId(t.id) : undefined}
+                  // Mid-answer the ids on screen are the optimistic ones, so
+                  // there is nothing yet that could be safely rewritten.
+                  editDisabled={busy}
+                  editDisabledReason={tr(
+                    "استنى لحد ما يخلص الرد",
+                    "Wait for the answer to finish",
+                  )}
+                />
               )}
             </div>
             )}
@@ -770,6 +905,20 @@ export default function AssistantPage() {
         </div>
       )}
 
+      {speech.listening && (
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <span className="relative flex h-2 w-2">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-destructive opacity-75" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-destructive" />
+          </span>
+          {speech.detected
+            ? speech.detected === "ar"
+              ? tr("بيتسمع… عربي", "Listening… Arabic")
+              : tr("بيتسمع… إنجليزي", "Listening… English")
+            : tr("بيتسمع…", "Listening…")}
+        </p>
+      )}
+
       <div className="flex items-end gap-2">
         <input
           ref={fileRef}
@@ -788,6 +937,36 @@ export default function AssistantPage() {
           aria-label={tr("ارفع صورة", "Attach a file")}
         >
           <Paperclip className="h-4 w-4" />
+        </Button>
+
+        <Button
+          size="icon"
+          // Listening has to look different from not, or there is no telling an
+          // open microphone from a button that is only sensitive to touch.
+          variant={speech.listening ? "destructive" : "outline"}
+          className="h-12 w-12 shrink-0"
+          disabled={!speech.supported}
+          onClick={() => speech.toggle(input)}
+          aria-pressed={speech.listening}
+          aria-label={
+            speech.listening ? tr("وقّف الإملاء", "Stop dictation") : tr("أملِ بصوتك", "Dictate")
+          }
+          title={
+            speech.supported
+              ? speech.listening
+                ? tr("وقّف الإملاء", "Stop dictation")
+                : tr("أملِ بصوتك", "Dictate")
+              : tr(
+                  "المتصفح ده مش بيدعم الإملاء — جرّب Chrome أو Safari",
+                  "This browser cannot dictate — try Chrome or Safari",
+                )
+          }
+        >
+          {speech.listening ? (
+            <MicOff className="h-4 w-4" />
+          ) : (
+            <Mic className="h-4 w-4" />
+          )}
         </Button>
 
         <Textarea
@@ -834,6 +1013,7 @@ export default function AssistantPage() {
             onClick={() => {
               if (chats.activeId) void chats.deleteChat(chats.activeId);
               setStreamed([]);
+              setEditingId(null);
             }}
             aria-label={tr("امسح المحادثة", "Clear chat")}
           >
