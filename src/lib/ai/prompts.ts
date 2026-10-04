@@ -247,6 +247,48 @@ Return ONLY this JSON, with no prose and no markdown fence:
 ${replyIn}`;
 }
 
+/**
+ * Reading a syllabus for the dates in it.
+ *
+ * The file already has everything; it is just written for a person who will
+ * read it in January. The model is asked for dates in one fixed format and told
+ * to leave a field empty rather than reason about an ambiguous one, because the
+ * student confirms every row afterwards and a confidently wrong date is the one
+ * they are least likely to notice.
+ */
+export const buildSyllabusPrompt = (today: string, subject: string) => `You read a course syllabus and list the dated things in it: exams, quizzes, assignments and their deadlines.
+
+Today is ${today}.
+
+Return ONLY this JSON, with no prose and no markdown fence:
+{
+  "events": [
+    {
+      "subject_key": "the course name as the syllabus writes it",
+      "title": "what the event is, e.g. Midterm exam",
+      "kind": "quiz | exam | assignment | other",
+      "date": "YYYY-MM-DD",
+      "start_time": "HH:MM or empty",
+      "end_time": "HH:MM or empty",
+      "hall": "room if stated, else empty",
+      "note": "anything that qualifies it, else empty"
+    }
+  ]
+}
+
+# Rules
+- "date" must be YYYY-MM-DD. A syllabus that says "week 7" instead of a date:
+  leave "date" empty and do not include that row. A guessed date is worse than a
+  missing one, because it will be counted down to.
+- "subject_key"${subject ? ` should be "${subject}" when the syllabus does not name the course itself` : " is required, and if the syllabus does not name the course, leave the row out"}.
+- "kind" is "exam" for a final or midterm sitting, "quiz" for a short test,
+  "assignment" for work to submit, "other" for anything else dated.
+- "start_time" only when the syllabus states a time of day. Never guess one from
+  a usual start time.
+- Also include the grading weights, the withdrawal deadline and the last day to
+  drop a quiz as "other" rows, since they are dates a student needs.
+- If the file has no dated events at all, return an empty list.`;
+
 export const QUIZ_CHAT_SYSTEM = `${BASE}
 
 # Scope — QUIZ MODE

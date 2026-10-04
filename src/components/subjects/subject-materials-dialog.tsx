@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import {
+  CalendarPlus,
   Copy,
   ExternalLink,
   FileText,
@@ -18,6 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { detectKind, kindMeta, pickerMaterials, safeUrl, sharedFileCounts, type MaterialKindId } from "@/lib/materials";
+import { SyllabusDialog } from "@/components/subjects/syllabus-dialog";
 import { formatBytes, removeStoredFile } from "@/lib/db/storage";
 import { AddMaterialRow } from "@/components/subjects/add-material-row";
 import { cn } from "@/lib/utils";
@@ -47,6 +49,7 @@ export function MaterialRow({
   const [renaming, setRenaming] = useState(false);
   const [title, setTitle] = useState(material.title);
   const [busy, setBusy] = useState(false);
+  const [dates, setDates] = useState(false);
 
   const kindId: MaterialKindId = detectKind(material.url, material.type);
   const kind = kindMeta(kindId);
@@ -112,14 +115,28 @@ export function MaterialRow({
       </div>
 
       <div className="flex shrink-0 gap-0.5">
+        {/* Only a file this app holds can be read: the route fetches it through
+            the student's own storage, and a link has no file behind it. */}
+        {material.file_path && kindId !== "video" && (
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8"
+            aria-label={tr("استخرج المواعيد", "Extract dates")}
+            title={tr("استخرج مواعيد الامتحانات من الملف", "Pull exam dates out of this file")}
+            onClick={() => setDates(true)}
+          >
+            <CalendarPlus className="h-3.5 w-3.5" />
+          </Button>
+        )}
         {href && (
           <>
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-8 w-8"
-              aria-label={tr("انسخ", "Copy")}
-              onClick={() =>
+<Button
+          size="icon"
+          variant="ghost"
+          className="h-8 w-8"
+          aria-label={tr("انسخ", "Copy")}
+          onClick={() =>
                 void navigator.clipboard
                   .writeText(href)
                   .then(() => toast({ title: tr("اتنسخ", "Copied") }))
@@ -164,6 +181,11 @@ export function MaterialRow({
           <Trash2 className="h-3.5 w-3.5" />
         </Button>
       </div>
+      {/* Mounted only once it is opened: a dialog per row would otherwise be a
+          hidden dialog for every file on every course. */}
+      {dates && (
+        <SyllabusDialog open={dates} onOpenChange={setDates} material={material} />
+      )}
     </li>
   );
 }
