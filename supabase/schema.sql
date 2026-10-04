@@ -400,6 +400,74 @@ drop policy if exists share_links_write on public.share_links;
 create policy share_links_write on public.share_links
   for insert with check (auth.uid() = user_id);
 
+-- ── AI quota ───────────────────────────────────────────────────────────
+-- The AI routes cost money per call and the keys are server-side, so nothing in
+-- the app stops one person from calling /api/ai/chat in a loop. An in-process
+-- counter would not help: a serverless deploy runs many instances, so a limit
+-- held in one instance's memory is one any single call can slip past by landing
+-- on another. This table is the counter every instance shares.
+--
+-- RLS is on with no policy, so the table is unreachable from a browser. The only
+-- way in is consume_ai_quota below, and the server supplies the user id itself
+-- after verifying the caller's token - so the argument cannot be forged.
+-- Same text as supabase/10-ai-rate-limit.sql.
+
+create table if not exists public.ai_usage (
+  user_id      uuid primary key references auth.users on delete cascade,
+  window_start timestamptz not null default now(),
+  count        integer not null default 0
+);
+
+alter table public.ai_usage enable row level security;
+
+create or replace function public.consume_ai_quota(
+  p_user          uuid,
+  p_limit         integer,
+  p_window_mins   integer
+)
+returns table(allowed boolean, remaining integer, resets_at timestamptz)
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  cur public.ai_usage%rowtype;
+  now_ts timestamptz := now();
+  window_len interval := make_interval(mins => p_window_mins);
+begin
+  -- Lock this caller's own row for the length of the transaction. At most one
+  -- row exists per user, so this serialises that user's calls against each other
+  -- and against nobody else.
+  select * into cur from public.ai_usage where user_id = p_user for update;
+
+  if not found then
+    insert into public.ai_usage (user_id, window_start, count)
+    values (p_user, now_ts, 1);
+    return query select true, p_limit - 1, now_ts + window_len;
+    return;
+  end if;
+
+  if cur.window_start + window_len <= now_ts then
+    update public.ai_usage
+       set window_start = now_ts, count = 1
+     where user_id = p_user;
+    return query select true, p_limit - 1, now_ts + window_len;
+    return;
+  end if;
+
+  if cur.count >= p_limit then
+    return query select false, 0, cur.window_start + window_len;
+    return;
+  end if;
+
+  update public.ai_usage set count = count + 1 where user_id = p_user;
+  return query select true, p_limit - (cur.count + 1), cur.window_start + window_len;
+end;
+$$;
+
+revoke all on function public.consume_ai_quota(uuid, integer, integer) from public;
+grant execute on function public.consume_ai_quota(uuid, integer, integer) to authenticated;
+
 -- ── Material storage ──────────────────────────────────────────────────
 -- Files dropped on a subject are uploaded here, not into Postgres.
 -- The bucket is public so a PDF opens in a new tab, but writes are only

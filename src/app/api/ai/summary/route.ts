@@ -6,6 +6,7 @@ import { buildSummaryPrompt } from "@/lib/ai/prompts";
 import { loadMaterials, skipReason } from "@/lib/ai/material-fetch";
 import { summarySchema, tidySummary } from "@/lib/ai/summary";
 import { taskModel } from "@/lib/ai/routing";
+import { guardAiRequest } from "@/lib/ai/rate-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 90;
@@ -37,6 +38,9 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
+  const refused = await guardAiRequest(req, raw);
+  if (refused) return refused;
+
   const { materialId, language } = parsed.data;
 
   const ac = new AbortController();

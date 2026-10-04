@@ -6,6 +6,7 @@ import { buildFlashcardsPrompt } from "@/lib/ai/prompts";
 import { cleanGeneratedCards } from "@/lib/flashcards";
 import { loadMaterials, skipReason } from "@/lib/ai/material-fetch";
 import { taskModel } from "@/lib/ai/routing";
+import { guardAiRequest } from "@/lib/ai/rate-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 90;
@@ -38,6 +39,9 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
+
+  const refused = await guardAiRequest(req, body);
+  if (refused) return refused;
 
   const { subject, text, materials, count, language } = parsed.data;
   const ac = new AbortController();

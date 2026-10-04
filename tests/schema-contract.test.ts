@@ -221,6 +221,7 @@ test("every migration is safe to run twice", async () => {
     "../supabase/07-updated-date.sql",
     "../supabase/08-questions.sql",
     "../supabase/09-push-subscriptions.sql",
+    "../supabase/10-ai-rate-limit.sql",
   ];
   for (const rel of files) {
     const text = await read(new URL(rel, import.meta.url));

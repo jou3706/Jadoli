@@ -6,6 +6,7 @@ import { quizSetSchema, quizSourceSchema, type QuizSet } from "@/lib/ai/schema";
 import { loadMaterials, skipReason } from "@/lib/ai/material-fetch";
 import { taskModel, verifierFor } from "@/lib/ai/routing";
 import { applyFixes, parseVerdict, verdictInput } from "@/lib/ai/quiz-verify";
+import { guardAiRequest } from "@/lib/ai/rate-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -25,6 +26,9 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
+  const refused = await guardAiRequest(req, body);
+  if (refused) return refused;
+
   const src = parsed.data;
 
   const ac = new AbortController();

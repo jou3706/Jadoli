@@ -6,6 +6,7 @@ import { buildSyllabusPrompt } from "@/lib/ai/prompts";
 import { loadMaterials, skipReason } from "@/lib/ai/material-fetch";
 import { syllabusDrafts, syllabusResultSchema } from "@/lib/ai/syllabus";
 import { taskModel } from "@/lib/ai/routing";
+import { guardAiRequest } from "@/lib/ai/rate-limit";
 import { isoDate, nowCairo } from "@/lib/utils";
 
 export const runtime = "nodejs";
@@ -40,6 +41,9 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
+  const refused = await guardAiRequest(req, raw);
+  if (refused) return refused;
+
   const { materialId, subject, language } = parsed.data;
 
   const ac = new AbortController();

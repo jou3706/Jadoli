@@ -6,6 +6,7 @@ import { buildNotesPrompt } from "@/lib/ai/prompts";
 import { loadMaterials, skipReason } from "@/lib/ai/material-fetch";
 import { notesSchema, tidyNotes } from "@/lib/ai/notes";
 import { taskModel } from "@/lib/ai/routing";
+import { guardAiRequest } from "@/lib/ai/rate-limit";
 
 export const runtime = "nodejs";
 // Notes are a longer answer than a summary from a longer read of the file, and a
@@ -39,6 +40,9 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
+  const refused = await guardAiRequest(req, raw);
+  if (refused) return refused;
+
   const { materialId, language } = parsed.data;
 
   const ac = new AbortController();

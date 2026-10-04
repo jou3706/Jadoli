@@ -4,6 +4,7 @@ import { streamChat } from "@/lib/ai/providers";
 import { ASSISTANT_SYSTEM, MATERIALS_SYSTEM, QUIZ_CHAT_SYSTEM } from "@/lib/ai/prompts";
 import { describePools, hasKeys, totalKeys } from "@/lib/ai/keys";
 import type { ModelId } from "@/lib/ai/models";
+import { guardAiRequest } from "@/lib/ai/rate-limit";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -31,6 +32,11 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
+
+  // After validation, so a malformed request costs nothing, and before any key is
+  // touched, so an anonymous or over-quota caller never reaches a provider.
+  const refused = await guardAiRequest(req, body);
+  if (refused) return refused;
 
   const { model, question, mode, history, images } = parsed.data;
   const ac = new AbortController();

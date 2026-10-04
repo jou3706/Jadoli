@@ -3,6 +3,7 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { candidates, clearPenalty, penalize } from "@/lib/ai/keys";
 import { buildCoverPrompt } from "@/lib/ai/prompts";
+import { guardAiRequest } from "@/lib/ai/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -57,6 +58,10 @@ export async function POST(req: Request) {
   if (!subject) {
     return NextResponse.json({ error: "Subject is required" }, { status: 400 });
   }
+
+  // No language on this route, so the guard's Arabic default applies.
+  const refused = await guardAiRequest(req);
+  if (refused) return refused;
 
   const keys = candidates("gemini");
   if (keys.length === 0) {
