@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { authHeader } from "@/lib/db/supabase-client";
+import { invalidatePushSubscription } from "@/lib/push-subscription";
 import { isTimeZone } from "@/lib/tz";
 
 /**
@@ -127,6 +128,7 @@ export function usePush(): PushStatus {
         // subscription that cannot be deleted leaves no row sending to it.
         await unsubscribe(existing.endpoint);
         await existing.unsubscribe();
+        invalidatePushSubscription();
         setState("off");
         return;
       }
@@ -136,6 +138,7 @@ export function usePush(): PushStatus {
         applicationServerKey: keyBytes(vapidPublicKey),
       });
       await save(sub.toJSON() as PushSubscriptionJSON);
+      invalidatePushSubscription();
       setState("on");
     } catch {
       // Anything that goes wrong here ends with the switch off and the truth on

@@ -27,6 +27,7 @@ import {
   vibrate,
 } from "@/lib/alarm-sound";
 import { notificationsEnabled, setAlarmPref, soundEnabled } from "@/lib/alarm-prefs";
+import { isPushSubscribed, shouldNotifyInApp } from "@/lib/push-subscription";
 import { useAlarmPrefs } from "@/hooks/use-alarm-prefs";
 
 /**
@@ -140,7 +141,7 @@ export function useEventAlarms() {
 
   /** Ring for the next eligible event, or stay quiet. */
   const check = useCallback(
-    (now: Date) => {
+    async (now: Date) => {
       if (!who) return;
       const next = list.find((e) => isEligible(e, store.current, now));
       if (!next) return;
@@ -153,7 +154,8 @@ export function useEventAlarms() {
         if (
           notificationsEnabled() &&
           "Notification" in window &&
-          Notification.permission === "granted"
+          Notification.permission === "granted" &&
+          shouldNotifyInApp(await isPushSubscribed())
         ) {
           const options: AlarmNotification = {
             body: [next.subject_key, next.start_time].filter(Boolean).join(" · "),
