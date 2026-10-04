@@ -78,6 +78,8 @@ function fakeCaches(initial: Entry[] = []) {
   };
 }
 
+type Shown = { title: string; options: Record<string, unknown> };
+
 type Harness = {
   listeners: Record<string, (e: never) => void>;
   calls: string[];
@@ -85,14 +87,25 @@ type Harness = {
   setReload: (v: boolean) => void;
   caches: ReturnType<typeof fakeCaches>;
   fetch: (r: { url: string; mode: string }) => Promise<unknown>;
+  /** Notifications the worker asked the browser to show. */
+  shown: Shown[];
+  /** Windows the worker asked the browser to open. */
+  opened: string[];
+  /** Windows the browser reported as already open. */
+  windows: { url: string; focused?: boolean }[];
 };
 
-async function boot(opts: { online?: boolean; cached?: Entry[] } = {}): Promise<Harness> {
+async function boot(
+  opts: { online?: boolean; cached?: Entry[]; windows?: { url: string }[] } = {},
+): Promise<Harness> {
   const source = await readFile(SW, "utf8");
   const listeners: Record<string, (e: never) => void> = {};
   const calls: string[] = [];
   const net = { up: opts.online ?? true, reload: false };
   const caches = fakeCaches(opts.cached ?? []);
+  const shown: Shown[] = [];
+  const opened: string[] = [];
+  const windows: { url: string; focused?: boolean }[] = opts.windows ?? [];
 
   const fetchMock = async (request: { url: string; cache?: string }) => {
     calls.push(request.url);
@@ -126,7 +139,19 @@ async function boot(opts: { online?: boolean; cached?: Entry[] } = {}): Promise<
     },
     location: { origin: ORIGIN },
     skipWaiting: () => undefined,
-    clients: { claim: () => undefined },
+    clients: {
+      claim: () => undefined,
+      matchAll: async () => windows,
+      openWindow: async (url: string) => {
+        opened.push(url);
+        return { url };
+      },
+    },
+    registration: {
+      showNotification: async (title: string, options: Record<string, unknown>) => {
+        shown.push({ title, options });
+      },
+    },
   };
 
   const ctx = vm.createContext({
@@ -144,6 +169,9 @@ async function boot(opts: { online?: boolean; cached?: Entry[] } = {}): Promise<
     listeners,
     calls,
     caches,
+    shown,
+    opened,
+    windows,
     setNet: (v) => {
       net.up = v;
     },
@@ -487,4 +515,110 @@ test("a browser holding the previous build's cache is given the current one", as
   // The name is what did the work: entries written under the previous build's
   // cache are the ones that went.
   assert.deepEqual([...h.caches.owners.values()].filter((o) => o === "jadoli-v5"), []);
+});
+
+// ─────────────────────────────────────────────────────────────
+// Reminders with the app closed
+// ─────────────────────────────────────────────────────────────
+
+/** Runs a push event through the worker, as the browser would. */
+async function push(h: Harness, data: unknown) {
+  let waited: Promise<unknown> = Promise.resolve();
+  (h.listeners.push as (e: unknown) => void)({
+    data:
+      data === undefined
+        ? null
+        : {
+            json: () => {
+              if (data instanceof Error) throw data;
+              return data;
+            },
+          },
+    waitUntil: (p: Promise<unknown>) => {
+      waited = p;
+    },
+  });
+  await waited;
+}
+
+/** Runs a notification tap through the worker. */
+async function tap(h: Harness, data: unknown) {
+  let closed = 0;
+  let waited: Promise<unknown> = Promise.resolve();
+  (h.listeners.notificationclick as (e: unknown) => void)({
+    notification: { close: () => void closed++, data },
+    waitUntil: (p: Promise<unknown>) => {
+      waited = p;
+    },
+  });
+  await waited;
+  return closed;
+}
+
+test("a push becomes a notification that says what is due", async () => {
+  const h = await boot();
+  await push(h, {
+    title: "Physics 1",
+    body: "امتحان الساعة 09:00",
+    tag: "e1:2026-10-20:09:00",
+    url: "/events",
+  });
+  assert.equal(h.shown.length, 1);
+  assert.equal(h.shown[0].title, "Physics 1");
+  assert.equal(h.shown[0].options.body, "امتحان الساعة 09:00");
+  assert.equal(
+    h.shown[0].options.tag,
+    "e1:2026-10-20:09:00",
+    "the tag is what stops a retry stacking a second notification",
+  );
+});
+
+test("a push with nothing usable still says something", async () => {
+  // Three shapes a push can arrive in and none of them is worth losing a
+  // reminder over: no data at all, data that is not JSON, and JSON that is not
+  // an object. A notification with no body is bad, but no notification at all is
+  // worse - the exam is still happening.
+  for (const bad of [undefined, new Error("not json"), null, "a string", 42]) {
+    const h = await boot();
+    await push(h, bad);
+    assert.equal(h.shown.length, 1, `${String(bad)} must still produce a notification`);
+    assert.ok(String(h.shown[0].title).length > 0, "it needs a heading");
+    assert.ok(String(h.shown[0].options.body).length > 0, "and something to read");
+    // With no usable tag there is nothing to replace, so the browser keeps both.
+    assert.equal(h.shown[0].options.tag, undefined);
+  }
+});
+
+test("tapping a reminder with the app closed opens it", async () => {
+  const h = await boot();
+  const closed = await tap(h, { url: "/events" });
+  assert.equal(closed, 1, "the notification must close itself either way");
+  assert.deepEqual(h.opened, [`${ORIGIN}/events`]);
+});
+
+test("tapping a reminder with the app open focuses it instead of opening a second copy", async () => {
+  // Two windows of a client-routed app is not a small annoyance: they disagree
+  // about which route is showing, and the one that was not tapped keeps its own
+  // copy of the data.
+  const h = await boot({ windows: [{ url: `${ORIGIN}/week` }] });
+  await tap(h, { url: "/events" });
+  assert.deepEqual(h.opened, [], "no second window may be opened");
+});
+
+test("a reminder never takes over another site's window", async () => {
+  const h = await boot({ windows: [{ url: "https://elsewhere.test/other" }] });
+  await tap(h, { url: "/events" });
+  assert.deepEqual(h.opened, [`${ORIGIN}/events`], "it opens its own rather than focusing that");
+});
+
+test("a tap with no route in it still lands somewhere real", async () => {
+  const h = await boot();
+  await tap(h, undefined);
+  assert.deepEqual(h.opened, [`${ORIGIN}/events`]);
+});
+
+test("a route that is not a path cannot send the tap off the app", async () => {
+  const h = await boot();
+  await tap(h, { url: "https://elsewhere.test/phish" });
+  assert.deepEqual(h.opened, [`${ORIGIN}/events`]);
 });

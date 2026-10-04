@@ -1,4 +1,5 @@
 import type { SubjectEvent } from "./db/types";
+import { instantOfCivil } from "./tz";
 
 /**
  * When an alarm should go off, and when it should stop being offered.
@@ -38,7 +39,17 @@ export const remindChoices = (current: number) => {
 export const ALARM_GRACE_MINUTES = 30;
 
 /** `YYYY-MM-DD` plus `HH:MM` on this device's clock, as a real instant. */
-export function eventStart(event: Pick<SubjectEvent, "date" | "start_time">): Date | null {
+export function eventStart(
+  event: Pick<SubjectEvent, "date" | "start_time">,
+  /**
+   * Whose clock to read it on. Left out, it is this device's - which is what
+   * every caller in the app wants, because the app runs on the person's own
+   * machine. A push job does not have that luxury and names the subscriber's
+   * zone instead; see `lib/tz` for why it has to be told.
+   */
+  timeZone?: string,
+): Date | null {
+  if (timeZone) return instantOfCivil(event.date ?? "", event.start_time ?? "", timeZone);
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(event.date ?? "");
   if (!m) return null;
   const [, y, mo, d] = m;
@@ -57,8 +68,11 @@ export const remindMinutesOf = (event: Pick<SubjectEvent, "remind_minutes">) =>
     : DEFAULT_REMIND_MINUTES;
 
 /** The instant the alarm should start for this event. */
-export function alarmAt(event: Pick<SubjectEvent, "date" | "start_time" | "remind_minutes">): Date | null {
-  const start = eventStart(event);
+export function alarmAt(
+  event: Pick<SubjectEvent, "date" | "start_time" | "remind_minutes">,
+  timeZone?: string,
+): Date | null {
+  const start = eventStart(event, timeZone);
   if (!start) return null;
   return new Date(start.getTime() - remindMinutesOf(event) * 60_000);
 }
@@ -75,9 +89,10 @@ export function alarmWindow(
   event: Pick<SubjectEvent, "date" | "start_time" | "remind_minutes">,
   now: Date,
   graceMinutes = ALARM_GRACE_MINUTES,
+  timeZone?: string,
 ): { start: number; at: number; until: number } | null {
-  const start = eventStart(event);
-  const at = alarmAt(event);
+  const start = eventStart(event, timeZone);
+  const at = alarmAt(event, timeZone);
   if (!start || !at) return null;
   const t = now.getTime();
   const from = at.getTime();
@@ -87,9 +102,9 @@ export function alarmWindow(
 }
 
 /** Every event whose alarm is true right now, soonest first. */
-export const dueAlarms = (events: SubjectEvent[], now: Date) =>
+export const dueAlarms = (events: SubjectEvent[], now: Date, timeZone?: string) =>
   events
-    .map((e) => ({ event: e, ...(alarmWindow(e, now) ?? {}) }))
+    .map((e) => ({ event: e, ...(alarmWindow(e, now, undefined, timeZone) ?? {}) }))
     .filter((x): x is { event: SubjectEvent; start: number; at: number; until: number } =>
       x.start !== undefined,
     )

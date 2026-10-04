@@ -1,5 +1,9 @@
 /*
- * Offline shell.
+ * Offline shell, and the reminders that arrive with the app closed.
+ *
+ * Two jobs in one worker, because a page can only have one: the cache below is
+ * what makes the app open without a network, and the push handlers further down
+ * are what makes an exam reminder arrive when there is no page to show it in.
  *
  * The cache name is a hand-written constant, bumped by hand. Next.js puts a
  * content hash in every chunk filename, so a new deploy always produces new
@@ -24,7 +28,7 @@
  * chunks, and the old JavaScript, with no way to tell - the app loads, and it
  * is simply the app as it was before the fix.
  */
-const VERSION = "jadoli-v9";
+const VERSION = "jadoli-v10";
 /**
  * Every route the app can open, because a page that is not cached is not
  * merely missing - it is worse than missing. The worker falls back to the home
@@ -172,6 +176,112 @@ self.addEventListener("message", (event) => {
   );
   event.waitUntil(
     caches.open(VERSION).then((cache) => Promise.allSettled(urls.map((u) => cache.add(u)))),
+  );
+});
+
+/**
+ * Reminders that arrive when the app is not open.
+ *
+ * The worker owns them because the worker is the only part of this app that is
+ * still running when the tab is closed - which is the entire reason these are
+ * sent as push rather than shown by the page. Everything here has to survive a
+ * push event carrying something other than what we sent, because that is what a
+ * truncated or unexpected payload looks like, and a reminder that throws while
+ * it is being shown is a reminder that never arrives.
+ */
+
+/** The route a notification opens, when the payload does not name a better one. */
+const PUSH_FALLBACK = "/events";
+
+/**
+ * The notification's own wording, when the payload is not usable.
+ *
+ * Says what happened rather than that something happened: an unnamed
+ * notification on a phone at 8am reads as an error, and a student who cannot
+ * tell a reminder from a failure stops trusting the whole channel.
+ */
+const pushTitle = (data) => (typeof data.title === "string" && data.title.trim()) || "Jadoli";
+const pushBody = (data) =>
+  typeof data.body === "string" && data.body.trim() ? data.body.trim() : "You have something due";
+
+/**
+ * The payload, or an empty object.
+ *
+ * `event.data.json()` throws on anything that is not JSON, and a push event with
+ * no data at all has `data` as null. Both are ordinary enough - a browser that
+ * sends a test message, a payload that got cut - that neither is worth losing a
+ * reminder over.
+ */
+const readPush = (event) => {
+  try {
+    const parsed = event.data ? event.data.json() : null;
+    return parsed && typeof parsed === "object" ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+self.addEventListener("push", (event) => {
+  const data = readPush(event);
+  event.waitUntil(
+    self.registration.showNotification(pushTitle(data), {
+      body: pushBody(data),
+      // The tag is the reminder's identity, so a second push for the same
+      // reminder replaces the first in the tray instead of stacking up beside
+      // it. Without it, a retry looks like two exams.
+      tag: typeof data.tag === "string" && data.tag ? data.tag : undefined,
+      data: { url: typeof data.url === "string" ? data.url : PUSH_FALLBACK },
+      icon: "/icon.svg",
+      badge: "/icon.svg",
+      // Silent:false would be the default, but a reminder that arrives while the
+      // app is open should not make a sound the page has already made.
+      silent: false,
+      vibrate: [200, 100, 200],
+      lang: "ar",
+    }),
+  );
+});
+
+/**
+ * Tapping a notification.
+ *
+ * Focuses a window that is already open rather than opening a second one. Two
+ * copies of a client-routed app is not a small annoyance: they disagree about
+ * which route is showing, and the one the student did not tap keeps its own copy
+ * of the data.
+ */
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target =
+    event.notification.data && typeof event.notification.data.url === "string"
+      ? event.notification.data.url
+      : PUSH_FALLBACK;
+  // Resolved against our own origin and then checked, because `new URL` happily
+  // accepts an absolute url of any origin and would send the tap there. Nothing
+  // in the payload is trusted: a reminder's text is built out of an event title,
+  // which is a student's own typing, so the route is treated as untrusted input
+  // rather than as something the server would never send.
+  let url = `${self.location.origin}${PUSH_FALLBACK}`;
+  try {
+    const resolved = new URL(target, self.location.origin);
+    if (resolved.origin === self.location.origin) url = resolved.href;
+  } catch {
+    /* an unparseable route is not a reason to lose the tap */
+  }
+
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: "window", includeUncontrolled: true })
+      .then((list) => {
+        // An open Jadoli window anywhere is the one to reuse, whichever route it
+        // happens to be showing: the app navigates on the client, so posting a
+        // message to it lands on the right screen without a reload.
+        const open = list.find((c) => c.url && new URL(c.url).origin === self.location.origin);
+        if (!open) return self.clients.openWindow(url);
+        if ("focus" in open) return open.focus();
+        return undefined;
+      })
+      .catch(() => self.clients.openWindow(url)),
   );
 });
 
