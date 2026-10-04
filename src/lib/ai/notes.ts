@@ -26,9 +26,19 @@ const formula = z.object({
   expression: z.string().max(600).default(""),
 });
 
+// Columns first, then a row per line. A grid cannot be asked for as prose and
+// then rebuilt into a grid on the way in, because nothing in a sentence says
+// which cell a value belonged to.
+const table = z.object({
+  caption: z.string().max(200).default(""),
+  columns: z.array(z.string().max(120)).max(8).default([]),
+  rows: z.array(z.array(z.string().max(300)).max(9)).max(60).default([]),
+});
+
 export const notesSchema = z.object({
   overview: z.string().max(3000).default(""),
   sections: z.array(section).max(30).default([]),
+  tables: z.array(table).max(8).default([]),
   formulas: z.array(formula).max(20).default([]),
   takeaways: z.array(z.string().max(400)).max(12).default([]),
 });
@@ -38,8 +48,15 @@ export type RawNotes = z.infer<typeof notesSchema>;
 export type MaterialNotes = {
   overview: string;
   sections: { heading: string; body: string }[];
+  tables: MaterialTable[];
   formulas: { label: string; expression: string }[];
   takeaways: string[];
+};
+
+export type MaterialTable = {
+  caption: string;
+  columns: string[];
+  rows: string[][];
 };
 
 /**
@@ -69,12 +86,48 @@ const once = <T>(values: readonly T[], key: (v: T) => string): T[] => {
 };
 
 /**
+ * A grid with a shape a browser can draw.
+ *
+ * Models return ragged grids: three cells under a two column heading, or a
+ * stray extra cell at the end of a row. Drawn as it comes, those cells drift out
+ * from under their own headings and a row reads as belonging to the wrong column,
+ * so every row is cut or padded to the header's width. A row that is empty all
+ * the way across is dropped rather than printed as a blank band, and a grid with
+ * one column is not a grid.
+ */
+function tidyTable(raw: RawNotes["tables"][number]): MaterialTable | null {
+  const columns = (raw.columns ?? []).map((c) => String(c ?? "").replace(/\s+/g, " ").trim());
+  const width = Math.min(columns.filter(Boolean).length, 8);
+  if (width < 2) return null;
+  const kept = columns.slice(0, width);
+
+  const seen = new Set<string>();
+  const rows: string[][] = [];
+  for (const r of raw.rows ?? []) {
+    const cells = (Array.isArray(r) ? r : []).map((c) =>
+      String(c ?? "").replace(/\s+/g, " ").trim(),
+    );
+    const row = cells.slice(0, width);
+    while (row.length < width) row.push("");
+    if (row.every((c) => !c)) continue;
+    const key = row.join("\u0000").toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    rows.push(row);
+  }
+  if (!rows.length) return null;
+
+  return { caption: String(raw.caption ?? "").replace(/\s+/g, " ").trim(), columns: kept, rows };
+}
+
+/**
  * The parts of a reply worth printing.
  *
- * Nothing is required: notes with no formulas are still notes. What is dropped is
- * a section with no body, a formula with no expression, and any of those repeated
- * - a heading with nothing under it is a hole in the middle of a printed lecture,
- * which reads worse than the hole it leaves in the source.
+ * Nothing is required: notes with no formulas and no tables are still notes.
+ * What is dropped is a section with no body, a formula with no expression, a
+ * grid that is not one, and any of those repeated - a heading with nothing under
+ * it is a hole in the middle of a printed lecture, which reads worse than the
+ * hole it leaves in the source.
  */
 export function tidyNotes(raw: RawNotes): MaterialNotes {
 const sections = once(
@@ -91,6 +144,11 @@ const sections = once(
     (f) => f.expression.toLowerCase(),
   );
 
+  const tables = once(
+    (raw.tables ?? []).map(tidyTable).filter((t): t is MaterialTable => t !== null),
+    (t) => `${t.caption.toLowerCase()} ${t.columns.join("|").toLowerCase()}`,
+  );
+
   const takeaways: string[] = [];
   const tSeen = new Set<string>();
   for (const t of raw.takeaways ?? []) {
@@ -102,7 +160,13 @@ const sections = once(
     takeaways.push(line);
   }
 
-  return { overview: clean(raw.overview, 3000), sections, formulas, takeaways };
+  return {
+    overview: clean(raw.overview, 3000),
+    sections,
+    tables,
+    formulas,
+    takeaways,
+  };
 }
 
 const KEY = "jadoli:material-notes";
@@ -123,6 +187,7 @@ export function readCachedNotes(materialId: string): MaterialNotes | null {
     return {
       overview: parsed.overview,
       sections: Array.isArray(parsed.sections) ? parsed.sections : [],
+      tables: Array.isArray(parsed.tables) ? parsed.tables : [],
       formulas: Array.isArray(parsed.formulas) ? parsed.formulas : [],
       takeaways: Array.isArray(parsed.takeaways) ? parsed.takeaways : [],
     };

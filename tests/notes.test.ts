@@ -101,5 +101,11 @@ test("nothing is required", () => {
 
 test("an entirely empty reply tidies to an empty result, not an error", () => {
   const n = raw();
-  assert.deepEqual(n, { overview: "", sections: [], formulas: [], takeaways: [] });
+  assert.deepEqual(n, {
+    overview: "",
+    sections: [],
+    tables: [],
+    formulas: [],
+    takeaways: [],
+  });
 });

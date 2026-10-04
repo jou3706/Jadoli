@@ -12,15 +12,17 @@ import type { MaterialNotes } from "./ai/notes";
  * notes that no longer follow the lecture they are notes of.
  */
 
-type Wording = { [K in "formulas" | "takeaways" | "untitled"]: string };
+type Wording = { [K in "tables" | "formulas" | "takeaways" | "untitled"]: string };
 
 const WORDS: Record<"ar" | "en", Wording> = {
   ar: {
+    tables: "جداول المحاضرة",
     formulas: "الصيغ المهمة",
     takeaways: "الخلاصة",
     untitled: "ملاحظات المحاضرة",
   },
   en: {
+    tables: "Tables",
     formulas: "The formulas",
     takeaways: "Takeaways",
     untitled: "Lecture notes",
@@ -60,6 +62,23 @@ export function buildNotesDoc(input: {
       heading: String(s?.heading ?? "").replace(/\s+/g, " ").trim(),
       lines,
     });
+  }
+
+  const tables = (input.notes.tables ?? [])
+    .map((t) => ({
+      caption: String(t?.caption ?? "").replace(/\s+/g, " ").trim(),
+      columns: (t?.columns ?? []).map((c) => String(c ?? "").trim()),
+      rows: (t?.rows ?? []).map((r) => (Array.isArray(r) ? r : []).map((c) => String(c ?? "").trim())),
+    }))
+    .filter((t) => t.columns.length > 1 && t.rows.length > 0);
+  if (tables.length) {
+    // The grids get a heading of their own rather than being tucked under the
+    // section they came from: a table is the part of a lecture a student scans
+    // for, and it is the one thing on the page that cannot be read as prose.
+    blocks.push({ kind: "table", heading: words.tables, ...tables[0] });
+    for (const extra of tables.slice(1)) {
+      blocks.push({ kind: "table", heading: "", ...extra });
+    }
   }
 
   const formulas = (input.notes.formulas ?? [])

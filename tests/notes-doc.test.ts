@@ -7,6 +7,7 @@ import type { MaterialNotes } from "../src/lib/ai/notes.ts";
 const notes = (over: Partial<MaterialNotes> = {}): MaterialNotes => ({
   overview: "",
   sections: [],
+  tables: [],
   formulas: [],
   takeaways: [],
   ...over,
@@ -22,11 +23,43 @@ test("a lecture comes out in the order a page of notes is read in", () => {
     notes({
       overview: "What this covers.",
       sections: [{ heading: "Definitions", body: "Text." }],
-      formulas: [{ label: "Eigen", expression: "Av = λv" }],
+      tables: [{ caption: "T", columns: ["A", "B"], rows: [["1", "2"]] }],
+      formulas: [{ label: "Eigen", expression: "A*v = λ*v" }],
       takeaways: ["It holds."],
     }),
   );
-  assert.deepEqual(kinds(d), ["paragraphs", "paragraphs", "formulas", "callout"]);
+  assert.deepEqual(kinds(d), ["paragraphs", "paragraphs", "table", "formulas", "callout"]);
+});
+
+test("the tables get a heading of their own, and only the first of them", () => {
+  // A table is the part of a lecture a student scans for. Tucked under the section
+  // it came from it would be a grid in the middle of a paragraph.
+  const d = doc(
+    notes({
+      tables: [
+        { caption: "One", columns: ["A", "B"], rows: [["1", "2"]] },
+        { caption: "Two", columns: ["A"], rows: [["1"]] },
+      ],
+    }),
+  );
+  assert.deepEqual(kinds(d), ["table"]);
+  const block = d.blocks[0];
+  assert.equal(block.kind, "table");
+  if (block.kind !== "table") return;
+  assert.equal(block.heading, "Tables");
+  assert.equal(block.caption, "One");
+});
+
+test("a grid that is not one is left out rather than printed as one column", () => {
+  const d = doc(
+    notes({
+      tables: [
+        { caption: "List", columns: ["Only"], rows: [["a"]] },
+        { caption: "Empty", columns: ["A", "B"], rows: [] },
+      ],
+    }),
+  );
+  assert.deepEqual(kinds(d), []);
 });
 
 test("the overview leads without a heading over it", () => {

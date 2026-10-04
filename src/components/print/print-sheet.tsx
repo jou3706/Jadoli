@@ -136,6 +136,74 @@ export function PrintSheet({
               </ol>
             )}
 
+            {block.kind === "table" && (
+              <div>
+                {block.caption && (
+                  <p
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 700,
+                      margin: "0 0 8px",
+                      color: MUTED,
+                    }}
+                  >
+                    {block.caption}
+                  </p>
+                )}
+                <table
+                  style={{
+                    width: "100%",
+                    borderCollapse: "collapse",
+                    // A wide grid of prose at one size is unreadable, and the
+                    // columns are fixed, so the type gives ground as they grow.
+                    fontSize: block.columns.length > 5 ? 11 : block.columns.length > 3 ? 12 : 13,
+                    tableLayout: "fixed",
+                  }}
+                >
+                  <thead>
+                    <tr>
+                      {block.columns.map((c, j) => (
+                        <th
+                          key={j}
+                          style={{
+                            border: `1px solid ${RULE}`,
+                            background: "#f1f5f9",
+                            padding: "9px 12px",
+                            textAlign: "start",
+                            fontWeight: 700,
+                            color: INK,
+                            fontFamily: font(true),
+                          }}
+                        >
+                          {c}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {block.rows.map((row, i) => (
+                      <tr key={i} style={{ background: i % 2 ? "#f8fafc" : "#ffffff" }}>
+                        {row.map((cell, j) => (
+                          <td
+                            key={j}
+                            style={{
+                              border: `1px solid ${RULE}`,
+                              padding: "9px 12px",
+                              lineHeight: 1.6,
+                              color: BODY,
+                              verticalAlign: "top",
+                            }}
+                          >
+                            {cell}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
             {block.kind === "callout" && (
               <div
                 style={{

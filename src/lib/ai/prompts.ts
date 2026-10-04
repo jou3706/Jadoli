@@ -320,6 +320,7 @@ Return ONLY this JSON, with no prose and no markdown fence:
 {
   "overview": "what this lecture covers, in one or two paragraphs",
   "sections": [ { "heading": "the heading for this part", "body": "the lecture as it was given, in paragraphs separated by a blank line" } ],
+  "tables": [ { "caption": "what this table is", "columns": ["the column headings"], "rows": [ ["one cell per column"] ] } ],
   "formulas": [ { "label": "what the formula is for", "expression": "the formula itself" } ],
   "takeaways": ["the lines to revise from, each one a fact"]
 }
@@ -333,6 +334,14 @@ Return ONLY this JSON, with no prose and no markdown fence:
   topics into one section.
 - Keep the material's own worked examples, with their numbers as they were
   given. A worked example is the part a student cannot reconstruct.
+- "tables" is for anything the material presents as a grid: a comparison, a
+  classification, a distribution, a truth table, a worked schedule. Every row must
+  have one cell per column, in the order of "columns", and the same number of
+  cells in every row. Do not invent rows, do not merge two grids into one, and do
+  not write a table out as prose in a section when it belongs here - a comparison
+  that arrives as sentences cannot be scanned, and scanning is the point.
+  A "caption" names what the table is; leave it empty only if the material gave
+  the table no name.
 - "formulas" is for anything written as maths. Write it as plain text a reader can
   read at a glance on paper: "d/dx(x^n) = n*x^(n-1)", "A*v = λ*v",
   "det(A - λ*I) = 0". No LaTeX and no markup: there is no maths renderer
@@ -343,8 +352,8 @@ Return ONLY this JSON, with no prose and no markdown fence:
 - Where the material is unreadable, say so in that spot rather than passing over
   it: a scanned page that did not come through should read as a gap, not as a
   lecture that never covered it.
-- Plain prose only: no markdown, no emoji, no bullet characters in the body, and no
-  LaTeX anywhere.${language === "en" ? "\n- Write the overview, the headings and the section bodies in English." : "\n- اكتب المقدمة والعناوين ونصوص الأقسام بالعربية."}`;
+- Plain prose only: no markdown, no emoji, no bullet characters in the body, no
+  LaTeX anywhere, and no ASCII tables.${language === "en" ? "\n- Write the overview, the headings, the section bodies and the table contents in English." : "\n- اكتب المقدمة والعناوين ونصوص الأقسام ومحتوى الجداول بالعربية."}`;
 
 export const QUIZ_CHAT_SYSTEM = `${BASE}
 

@@ -20,6 +20,15 @@ export type PrintBlock =
   | { kind: "terms"; heading: string; rows: { term: string; meaning: string }[] }
   /** Set apart from the prose, the way a textbook sets a formula apart. */
   | { kind: "formulas"; heading: string; rows: { label: string; expression: string }[] }
+  /** A grid. Its own kind because a comparison flattened into prose is the one
+   * thing a revision sheet cannot be scanned for. */
+  | {
+      kind: "table";
+      heading: string;
+      caption: string;
+      columns: string[];
+      rows: string[][];
+    }
   /** A tinted box, for the part of the page that is the point of the page. */
   | { kind: "callout"; heading: string; items: string[] };
 
