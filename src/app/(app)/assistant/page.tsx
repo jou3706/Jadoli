@@ -32,7 +32,7 @@ import {
 import { newQuestions, questionPayload } from "@/lib/quiz-bank";
 import { QuizBuilder } from "@/components/ai/quiz-builder";
 import { QuizSession } from "@/components/review/quiz-session";
-import { MODELS, findModel, type ModelDef } from "@/lib/ai/models";
+import { MODELS, PROVIDER_ORDER, findModel, type ModelDef } from "@/lib/ai/models";
 import { nowCairo } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
@@ -51,8 +51,6 @@ const MODE_KEY = "jadoli:assistant-mode";
  * does not need a vision model - hiding them left one provider looking like the
  * only choice there was.
  */
-const PROVIDER_ORDER: ModelDef["provider"][] = ["gemini", "groq", "openrouter"];
-
 const PROVIDER_LABEL: Record<ModelDef["provider"], [string, string]> = {
   gemini: ["جوجل Gemini", "Google Gemini"],
   groq: ["Groq", "Groq"],
@@ -73,7 +71,7 @@ type Turn = {
   text: string;
   images?: Attachment[];
   applied?: { ok: boolean; label: string }[];
-  quiz?: QuizSet;
+  quiz?: QuizSet & { corrected?: number };
   /** Set while the student is choosing which files the exam is made from. */
   quizOffer?: { subjectKey?: string; topic?: string };
   error?: string;
@@ -156,7 +154,7 @@ export default function AssistantPage() {
       if (!res.ok) {
         throw new Error(String(data.message ?? data.reason ?? data.error ?? "quiz generation failed"));
       }
-      const set = data as QuizSet;
+      const set = data as QuizSet & { corrected?: number };
       const fresh = newQuestions(set.questions, bank, source.subjectKey);
       if (fresh.length) {
         const picked = source.materialIds
@@ -663,6 +661,7 @@ export default function AssistantPage() {
               <QuizSession
                 title={t.quiz.title}
                 questions={t.quiz.questions}
+                corrected={t.quiz.corrected}
                 onDone={() =>
                   setStreamed((p) =>
                     p

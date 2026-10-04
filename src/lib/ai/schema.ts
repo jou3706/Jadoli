@@ -32,8 +32,11 @@ export const chatBodySchema = z.object({
   images: z.array(image).max(6).default([]),
 });
 
+/**
+ * Importing a timetable is reading a photograph, so the model is never chosen
+ * here: it is whatever can see, which is the route's decision.
+ */
 export const importBodySchema = z.object({
-  model: z.string().min(1).max(60).default("gemini-35-flash"),
   images: z.array(image).min(1).max(8),
 });
 
@@ -169,7 +172,6 @@ export const materialRef = z.object({
 
 export const flashcardsBodySchema = z
   .object({
-    model: z.string().min(1).max(60).default("gemini-35-flash"),
     /** The course these cards belong to. */
     subject: z.string().max(120).default(""),
     /** Notes typed or pasted by the student. */

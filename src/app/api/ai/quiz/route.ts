@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { completeJson } from "@/lib/ai/providers";
 import { extractJson } from "@/lib/ai/extract";
-import { buildQuizPrompt } from "@/lib/ai/prompts";
+import { buildQuizPrompt, buildVerdictPrompt } from "@/lib/ai/prompts";
 import { quizSetSchema, quizSourceSchema, type QuizSet } from "@/lib/ai/schema";
 import { loadMaterials, skipReason } from "@/lib/ai/material-fetch";
-import type { ModelId } from "@/lib/ai/models";
+import { taskModel, verifierFor } from "@/lib/ai/routing";
+import { applyFixes, parseVerdict, verdictInput } from "@/lib/ai/quiz-verify";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -80,19 +81,18 @@ export async function POST(req: Request) {
     const images = attached.length
       ? attached.map((m) => ({ dataUrl: m.dataUrl, mime: m.mime }))
       : undefined;
+    // A marked answer the material does not support is the one failure a student
+    // cannot see for themselves, so the key is checked before it is handed over.
+    // Two models from two providers rarely mis-mark the same question, which is
+    // the whole value of asking the second one.
+    const writer = taskModel("quiz", attached.length > 0);
+    const checker = verifierFor(writer);
     // The provider is asked for JSON and extracts the first balanced value, but a
     // model can still slip once. A single retry turns a formatting hiccup into an
     // exam instead of an error the student cannot act on.
     let set: QuizSet | null = null;
     for (let attempt = 0; attempt < 2 && !set; attempt += 1) {
-      const raw = await completeJson(
-        "gemini-35-flash" as ModelId,
-        system,
-        user,
-        images,
-        ac.signal,
-        true,
-      );
+      const raw = await completeJson(writer, system, user, images, ac.signal, true);
       const parsed = quizSetSchema.safeParse(extractJson(raw));
       if (parsed.success) set = parsed.data;
     }
@@ -102,7 +102,28 @@ export async function POST(req: Request) {
         { status: 502 },
       );
     }
-    return NextResponse.json(set);
+
+    // Best effort by design: a checker that is unavailable, slow or unhelpful
+    // must not cost the student an exam that has already been written.
+    let checked = set;
+    let corrected = 0;
+    try {
+      const verdict = await completeJson(
+        checker,
+        buildVerdictPrompt(src.language === "en" ? "en" : "ar"),
+        verdictInput(set),
+        undefined,
+        ac.signal,
+        true,
+      );
+      const applied = applyFixes(set, parseVerdict(verdict));
+      checked = applied.set;
+      corrected = applied.applied;
+    } catch {
+      // The exam stands on its own.
+    }
+
+    return NextResponse.json({ ...checked, corrected });
   } catch (e) {
     const err = e as Error;
     return NextResponse.json({ error: err.message || "generation failed" }, { status: 500 });

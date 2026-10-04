@@ -3,7 +3,7 @@ import { importBodySchema } from "@/lib/ai/schema";
 import { extractArray } from "@/lib/ai/extract";
 import { completeJson } from "@/lib/ai/providers";
 import { IMPORT_SYSTEM } from "@/lib/ai/prompts";
-import type { ModelId } from "@/lib/ai/models";
+import { taskModel } from "@/lib/ai/routing";
 
 export const runtime = "nodejs";
 export const maxDuration = 90;
@@ -56,14 +56,14 @@ export async function POST(req: Request) {
     );
   }
 
-  const { model, images } = parsed.data;
+  const { images } = parsed.data;
   const ac = new AbortController();
   req.signal.addEventListener("abort", () => ac.abort(), { once: true });
 
   let raw: string;
   try {
     raw = await completeJson(
-      model as ModelId,
+      taskModel("import", true),
       IMPORT_SYSTEM,
       images.length === 1
         ? "Extract the timetable from this image."

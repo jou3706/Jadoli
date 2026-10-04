@@ -7,7 +7,7 @@ import {
   penalize,
   type KeyState,
 } from "./keys";
-import { findModel, type ModelId } from "./models";
+import { fallbackChain, type ModelDef, type ModelId } from "./models";
 
 export type ChatTurn = { role: "user" | "assistant"; text: string };
 export type ImagePart = { dataUrl: string; mime: string };
@@ -248,20 +248,57 @@ async function streamOpenAICompatible(
 /* ── Orchestrator ──────────────────────────────────────────── */
 
 /**
- * Streams a chat completion, walking the key pool until one succeeds. Each
- * failure penalises that key (short cooldown for rate limits, long for auth
- * errors) and the request transparently retries on the next healthy key.
+ * Statuses that describe the request rather than the provider.
+ *
+ * Sending the same broken request to seventeen models would only produce
+ * seventeen identical refusals, so these stop the walk. A 404 is deliberately
+ * not here: that one is about the model, and the next model may well exist.
+ */
+const FATAL_STATUS = new Set([400, 413, 422]);
+
+/** One call, on one key, with the model that was chosen for it. */
+async function callProvider(
+  def: ModelDef,
+  key: KeyState,
+  req: ChatRequest,
+  abort: ReturnType<typeof linkAbort>,
+): Promise<string> {
+  return def.provider === "gemini"
+    ? streamGemini(key, req, def.upstream, abort)
+    : streamOpenAICompatible(
+        key,
+        req,
+        def.upstream,
+        def.provider === "groq" ? "api.groq.com/openai/v1" : "openrouter.ai/api/v1",
+        def.provider === "openrouter"
+          ? {
+              "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL ?? "https://jadoli.app",
+              "X-Title": "Jadoli",
+            }
+          : {},
+        abort,
+      );
+}
+
+/**
+ * Streams a chat completion, walking models and keys until one succeeds.
+ *
+ * A failure penalises the key it burned — briefly for a rate limit, for hours
+ * for an auth error — and the request moves on: the next key in that pool, then
+ * the next model, then the next provider. Fifteen keys across three pools only
+ * buy resilience if something actually walks between them.
+ *
+ * Once a token has reached the browser the answer is already on screen, so a
+ * failure from that point is surfaced instead of restarted; a second attempt
+ * would print the opening of the answer twice.
  */
 export async function streamChat(req: ChatRequest): Promise<string> {
-  const def = findModel(req.model);
-  if (!hasKeys(def.provider)) {
+  const chain = fallbackChain(req.model, (req.images?.length ?? 0) > 0);
+  if (!chain.some((m) => hasKeys(m.provider))) {
     throw new Error(
-      `NO_KEYS:${def.provider} — add ${def.provider.toUpperCase()}_API_KEYS to .env.local`,
+      `NO_KEYS:${chain[0].provider} — add ${chain[0].provider.toUpperCase()}_API_KEYS to .env.local`,
     );
   }
-
-  const pool = candidates(def.provider);
-  if (!pool.length) throw new KeyExhaustedError(def.provider);
 
   const abort = linkAbort(req.signal);
   const errors: string[] = [];
@@ -271,51 +308,40 @@ export async function streamChat(req: ChatRequest): Promise<string> {
     req.onToken(t);
   };
 
-  for (let attempt = 0; attempt < pool.length; attempt++) {
-    const key = pool[attempt];
+  let attempted = false;
+  for (const model of chain) {
     if (req.signal?.aborted) throw new Error("ABORTED");
-    try {
-      const text =
-        def.provider === "gemini"
-          ? await streamGemini(key, { ...req, onToken }, def.upstream, abort)
-          : await streamOpenAICompatible(
-              key,
-              { ...req, onToken },
-              def.upstream,
-              def.provider === "groq" ? "api.groq.com/openai/v1" : "openrouter.ai/api/v1",
-              def.provider === "openrouter"
-                ? {
-                    "HTTP-Referer":
-                      process.env.NEXT_PUBLIC_SITE_URL ?? "https://jadoli.app",
-                    "X-Title": "Jadoli",
-                  }
-                : {},
-              abort,
-            );
-      clearPenalty(key);
-      abort.done();
-      return text;
-    } catch (e) {
-      const err = e as Error & { status?: number };
-      if (err.name === "AbortError" || err.message === "ABORTED") throw e;
-      // Part of the answer already reached the browser — restarting on another
-      // key would duplicate text, so surface the failure instead.
-      if (emitted) {
+    // A pool with no keys is not a failure worth reporting; walk past it.
+    const pool = candidates(model.provider);
+    if (!pool.length) continue;
+
+    for (const key of pool) {
+      attempted = true;
+      if (req.signal?.aborted) throw new Error("ABORTED");
+      try {
+        const text = await callProvider(model, key, { ...req, onToken }, abort);
+        clearPenalty(key);
         abort.done();
-        throw Object.assign(new Error("STREAM_INTERRUPTED"), { status: err.status });
-      }
-      const cooled = penalize(key, `${err.status ?? ""} ${err.message}`);
-      errors.push(
-        `${def.provider}#${key.index} (${err.status ?? "?"}) → cooling ${Math.round(cooled / 1000)}s`,
-      );
-      if (err.status && err.status < 500 && err.status !== 429) {
-        // Client-side problem — trying a different key won't help.
-        throw err;
+        return text;
+      } catch (e) {
+        const err = e as Error & { status?: number };
+        if (err.name === "AbortError" || err.message === "ABORTED") throw e;
+        if (emitted) {
+          abort.done();
+          throw Object.assign(new Error("STREAM_INTERRUPTED"), { status: err.status });
+        }
+        const cooled = penalize(key, `${err.status ?? ""} ${err.message}`);
+        errors.push(
+          `${model.provider}/${model.id}#${key.index} (${err.status ?? "?"}) → cooling ${Math.round(cooled / 1000)}s`,
+        );
+        if (err.status === 404) break; // that model is not there; try the next one
+        if (err.status && FATAL_STATUS.has(err.status)) throw err;
       }
     }
   }
   abort.done();
-  throw new Error(`All ${def.provider} keys failed — ${errors.join(" | ")}`);
+  if (!attempted) throw new KeyExhaustedError(chain[0].provider);
+  throw new Error(`every model failed — ${errors.join(" | ")}`);
 }
 
 /* ── Non-streaming helper for structured tasks ─────────────── */

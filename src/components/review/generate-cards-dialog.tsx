@@ -215,7 +215,6 @@ export function GenerateCardsDialog({
     setDropNote("");
     try {
       const data = await post({
-        model: "gemini-35-flash",
         subject: course,
         text: text.trim(),
         count,

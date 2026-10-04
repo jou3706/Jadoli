@@ -5,7 +5,7 @@ import { completeJson } from "@/lib/ai/providers";
 import { buildFlashcardsPrompt } from "@/lib/ai/prompts";
 import { cleanGeneratedCards } from "@/lib/flashcards";
 import { loadMaterials, skipReason } from "@/lib/ai/material-fetch";
-import type { ModelId } from "@/lib/ai/models";
+import { taskModel } from "@/lib/ai/routing";
 
 export const runtime = "nodejs";
 export const maxDuration = 90;
@@ -39,7 +39,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const { model, subject, text, materials, count, language } = parsed.data;
+  const { subject, text, materials, count, language } = parsed.data;
   const ac = new AbortController();
   req.signal.addEventListener("abort", () => ac.abort(), { once: true });
 
@@ -93,7 +93,7 @@ export async function POST(req: Request) {
   let raw: string;
   try {
     raw = await completeJson(
-      model as ModelId,
+      taskModel("flashcards", attached.length > 0),
       buildFlashcardsPrompt(language, count),
       instruction,
       attached.map((m) => ({ dataUrl: m.dataUrl, mime: m.mime })),

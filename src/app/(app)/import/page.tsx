@@ -124,7 +124,6 @@ export default function ImportPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "gemini-35-flash",
           images: files.map((f) => ({
             dataUrl: f.uri,
             mime: f.uri.match(/^data:([^;]+);/)?.[1] ?? "image/png",

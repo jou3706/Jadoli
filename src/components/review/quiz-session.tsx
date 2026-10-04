@@ -18,10 +18,13 @@ type Answer = { selected: number | string | null; outcome: Outcome | null };
 export function QuizSession({
   title,
   questions,
+  corrected,
   onDone,
 }: {
   title?: string;
   questions: QuizQuestion[];
+  /** How many marked answers a second model corrected before the exam was given. */
+  corrected?: number;
   onDone: () => void;
 }) {
   const [i, setI] = useState(0);
@@ -46,6 +49,11 @@ export function QuizSession({
         <div className="text-sm">
           نتيجتك: {score} / {questions.length}
         </div>
+        {corrected ? (
+          <div className="text-xs text-muted-foreground">
+            اتراجع مفتاح الإجابات بموديل تاني واتصحّح {corrected} إجابة قبل ما تشوف الاختبار
+          </div>
+        ) : null}
         <Button onClick={onDone}>عودة</Button>
       </div>
     );

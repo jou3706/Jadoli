@@ -215,6 +215,38 @@ ${languageRule}
  * read a file's contents, so it only settles on the subject and part, then hands
  * a structured request to the generator above.
  */
+/**
+ * The second opinion.
+ *
+ * A different model, from a different provider, looking at the same exam with
+ * the marked answers showing. Two models rarely fail on the same question in
+ * the same way, so this catches the mistakes one model made on its own — and it
+ * is told to stay silent rather than guess, because a confident wrong correction
+ * is worse than the mistake it was sent to catch.
+ */
+export function buildVerdictPrompt(language: "ar" | "en") {
+  const replyIn =
+    language === "en"
+      ? "Write the corrected answer text in English, copied exactly from the options."
+      : "اكتب نص الإجابة الصحيحة بالعربية، منقول بالظبط من الاختيارات.";
+  return `You are checking the answer key of a practice exam.
+
+You are given numbered questions, their options, and the answer that was marked correct.
+
+Return ONLY this JSON, with no prose and no markdown fence:
+{ "fixes": [ { "i": 0, "answer": "the full text of the correct option" } ] }
+
+# Rules
+- "i" is the question number as given, counting from 0.
+- Include an entry ONLY for a question whose marked answer is genuinely wrong.
+- If the marked answer is right, or you are not sure, say nothing about that question.
+- For "mcq", "answer" must be copied exactly from that question's options.
+- For "truefalse", "answer" must be exactly "true" or "false".
+- Never add a fix for a "short" question: there is no option list to copy from.
+- An empty list is the normal, correct answer when the key is sound.
+${replyIn}`;
+}
+
 export const QUIZ_CHAT_SYSTEM = `${BASE}
 
 # Scope — QUIZ MODE

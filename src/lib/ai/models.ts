@@ -61,3 +61,55 @@ export const DEFAULT_MODEL: ModelId = "gemini-35-flash";
 
 export const findModel = (id: string): ModelDef =>
   MODELS.find((m) => m.id === id) ?? MODELS[0];
+
+/** Whether a model can be handed a picture or a PDF at all. */
+export const readsAttachments = (m: ModelDef) => m.supportsImages || m.supportsPdf === true;
+
+/** The order providers are offered in. Gemini reads attachments; the rest are text. */
+export const PROVIDER_ORDER: ProviderId[] = ["gemini", "groq", "openrouter"];
+
+/**
+ * Who answers next, per provider, best first.
+ *
+ * Within a pool the models overlap a lot, so a rate limit on one is usually a
+ * temporary problem and a sibling is enough. The list is also what makes the
+ * app survive a whole provider being unavailable, which is the only real
+ * difference between fifteen keys spread over three pools and fifteen keys in
+ * one.
+ */
+const PROVIDER_FALLBACK: Record<ProviderId, ModelId[]> = {
+  gemini: ["gemini-38-flash", "gemini-35-flash-lite", "gemini-3-flash"],
+  groq: ["groq-120b", "groq-20b", "groq-qwen"],
+  openrouter: ["or-free", "or-qwen27", "or-nemotron-super"],
+};
+
+/**
+ * The models to try, in order, for one request.
+ *
+ * The chosen model is always first - a person who picked a model meant it. The
+ * rest is insurance: another model in the same pool first, because that shares
+ * the key pool and the shape of the answer, then the other pools.
+ *
+ * A request carrying a picture or a PDF only ever sees models that can read
+ * one. Handing an image to a text-only model wastes the whole call, so those are
+ * filtered out rather than tried and failed.
+ */
+export function fallbackChain(start: ModelId | ModelDef, hasAttachments: boolean): ModelDef[] {
+  const first = typeof start === "string" ? findModel(start) : start;
+  const seen = new Set<string>();
+  const chain: ModelDef[] = [];
+  const offer = (id: ModelId) => {
+    const m = findModel(id);
+    if (seen.has(m.id)) return;
+    if (hasAttachments && !readsAttachments(m)) return;
+    seen.add(m.id);
+    chain.push(m);
+  };
+
+  offer(first.id);
+  for (const id of PROVIDER_FALLBACK[first.provider]) offer(id);
+  for (const provider of PROVIDER_ORDER) {
+    for (const id of PROVIDER_FALLBACK[provider]) offer(id);
+  }
+  return chain;
+}

@@ -16,7 +16,7 @@ export default function QuizPage() {
   const { bulkCreate } = useMutate("Question");
   const [subjects, setSubjects] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const [quiz, setQuiz] = useState<QuizSet | null>(null);
+  const [quiz, setQuiz] = useState<(QuizSet & { corrected?: number }) | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
 
@@ -39,7 +39,7 @@ export default function QuizPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || data.reason || data.error || "generation failed");
-      const set = data as QuizSet;
+      const set = data as QuizSet & { corrected?: number };
       setQuiz(set);
 
       // Save what was not asked before. The bank is the record of the questions
@@ -77,7 +77,12 @@ export default function QuizPage() {
   if (quiz) {
     return (
       <div className="mx-auto max-w-2xl space-y-4 p-4">
-        <QuizSession questions={quiz.questions} title={quiz.title} onDone={() => setQuiz(null)} />
+        <QuizSession
+          questions={quiz.questions}
+          title={quiz.title}
+          corrected={quiz.corrected}
+          onDone={() => setQuiz(null)}
+        />
       </div>
     );
   }
