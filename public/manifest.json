@@ -9,7 +9,7 @@
   "prefer_related_applications": false,
   "orientation": "portrait",
   "background_color": "#ffffff",
-  "theme_color": "#4f46e5",
+  "theme_color": "#fafbfd",
   "dir": "rtl",
   "lang": "ar",
   "categories": ["education", "productivity"],
