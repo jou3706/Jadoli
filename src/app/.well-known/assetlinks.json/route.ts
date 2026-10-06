@@ -12,26 +12,37 @@ export const runtime = "nodejs";
  * worth shipping to someone using it as their timetable.
  *
  * The fingerprint is not knowable before the keystore exists, and it is
- * different for debug and release builds, so both come from the environment
- * rather than being written into the repository. Unconfigured means answering
- * 404: an empty or half-filled file is worse than none, because a site that
- * claims a package name it cannot prove is a claim that fails for the wrong
- * reason.
+ * different for debug and release builds, so both values come from the
+ * environment rather than being written into the repository. Unconfigured means
+ * answering 404: an empty or half-filled file is worse than none, because a
+ * site that claims a package name it cannot prove is a claim that fails for the
+ * wrong reason. The same reasoning makes a fingerprint in the wrong shape a 500
+ * - served as if it were real it would only fail verification silently.
  */
+
+// A certificate fingerprint is the SHA-256 of the signing key: 32 bytes as
+// hex, colon separated. That is the only shape the verification will accept.
+const FINGERPRINT = /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/;
+
 export async function GET() {
   const packageName = process.env.ANDROID_PACKAGE_NAME;
-  const fingerprint = process.env.ANDROID_SHA256_FINGERPRINT;
+  const raw = process.env.ANDROID_SHA256_FINGERPRINT;
 
-  if (!packageName || !fingerprint) {
+  if (!packageName || !raw) {
     return new NextResponse(null, { status: 404 });
   }
 
-  // A fingerprint is a base64 SHA-256 of the signing certificate, colon
-  // separated. Bubblewrap prints it in that shape; accepting the unseparated
-  // form too means pasting either of the two things everyone actually has.
-  const normalized = fingerprint.includes(":")
-    ? fingerprint
-    : fingerprint.replace(/(.{2})(?=.)/g, "$1:");
+  // Accept both the colon-separated form and the bare 64-hex form some tools
+  // print, then uppercase: some emit lowercase hex and the comparison the
+  // Installer does with the certificate is exact.
+  const fingerprint = (raw.includes(":")
+    ? raw
+    : raw.replace(/(.{2})(?=.)/g, "$1:")
+  ).toUpperCase();
+
+  if (!FINGERPRINT.test(fingerprint)) {
+    return new NextResponse(null, { status: 500 });
+  }
 
   return NextResponse.json(
     [
@@ -40,7 +51,7 @@ export async function GET() {
         target: {
           namespace: "android_app",
           package_name: packageName,
-          sha256_cert_fingerprints: [normalized],
+          sha256_cert_fingerprints: [fingerprint],
         },
       },
     ],
