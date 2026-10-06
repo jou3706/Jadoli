@@ -42,7 +42,7 @@ export function PrintSheet({
       style={{
         position: "fixed",
         top: 0,
-        // Off to the side rather than `display: none`, because html2canvas draws
+        // Off to the side rather than `display: none`, because the capture draws
         // the element's own box and an unlaid-out element has none.
         left: -10000,
         width: SHEET_WIDTH,

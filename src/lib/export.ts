@@ -177,14 +177,18 @@ export function downloadICS(
   URL.revokeObjectURL(url);
 }
 
-/** Rasterises a DOM node to a PNG blob. Loaded lazily to keep the bundle small. */
+/**
+ * Rasterises a DOM node to a canvas. Loaded lazily to keep the bundle small.
+ *
+ * modern-screenshot paints through an SVG foreignObject, so the browser computes
+ * the colours: html2canvas re-parsed every style in JS and threw on the oklch()
+ * and color-mix() colours Tailwind v4 emits, which made the weekly export fail.
+ */
 export async function nodeToCanvas(node: HTMLElement, scale = 2) {
-  const { default: html2canvas } = await import("html2canvas");
-  return html2canvas(node, {
+  const { domToCanvas } = await import("modern-screenshot");
+  return domToCanvas(node, {
     backgroundColor: "#ffffff",
     scale,
-    useCORS: true,
-    windowWidth: node.scrollWidth,
   });
 }
 

@@ -9,7 +9,7 @@ import { useToast } from "@/components/ui/toast";
  * Printing a document, once, wherever it was built.
  *
  * The sheet is laid out in the page, off to the side where nobody can see it,
- * and then measured. It is never `display: none`: html2canvas renders from the
+ * and then measured. It is never `display: none`: the capture renders from the
  * element's own box, and an element that is not laid out has no box, so a hidden
  * one photographs as a blank sheet.
  *
