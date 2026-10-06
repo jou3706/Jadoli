@@ -17,11 +17,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
  *     again from `onend` or dictation stops the first time somebody thinks for a
  *     second. Only a deliberate stop stops it for good.
  *
- *  2. `lang` is left unset on purpose. Setting it is what most implementations
- *     do, and it hard-codes one language - but a student dictating in English and
- *     then switching to Arabic mid-question would be forced back. Left unset, the
- *     engine reports the language of each phrase in `lang`, so it detects as it
- *     goes and `detected` below follows it.
+ *  2. The language is chosen explicitly, never guessed. In Chrome an unset
+ *     `lang` does not work the language out from the speech the way the spec
+ *     suggests - it quietly uses the browser's own UI language, so a Chrome
+ *     whose UI is English hears English and nothing else. The recogniser pins a
+ *     `DictationLang` on `rec.lang` instead. Switching mid-session is still
+ *     possible, but it is the student switching, by choosing the language before
+ *     or during a session; the engine is never asked to decide.
  */
 
 /** One recognised phrase, flattened out of the API's array-like result list. */
@@ -92,6 +94,13 @@ export function langOf(tag: string | null | undefined): "ar" | "en" | null {
 }
 
 /**
+ * The two languages dictation can be pinned to, because recognition does not
+ * mix languages: one session belongs to exactly one, chosen by the student
+ * rather than inferred by the engine (see the note at the top of this file).
+ */
+export type DictationLang = "ar" | "en";
+
+/**
  * Whether an ended session should be started again.
  *
  * Only the interruptions that mean "keep going". `not-allowed` is a permission
@@ -148,7 +157,7 @@ export type SpeechError =
   | "network"
   | null;
 
-export function useSpeechToText(onText: (text: string) => void) {
+export function useSpeechToText(onText: (text: string) => void, lang?: DictationLang) {
   const [listening, setListening] = useState(false);
   const [detected, setDetected] = useState<"ar" | "en" | null>(null);
   const [error, setError] = useState<SpeechError>(null);
@@ -160,11 +169,15 @@ export function useSpeechToText(onText: (text: string) => void) {
   const wantRef = useRef(false);
   const baseRef = useRef("");
   const onTextRef = useRef(onText);
+  const langRef = useRef<DictationLang | undefined>(lang);
 
   // Read through a ref so the handlers below never close over a stale callback.
   useEffect(() => {
     onTextRef.current = onText;
   }, [onText]);
+  useEffect(() => {
+    langRef.current = lang;
+  }, [lang]);
 
   // Whether the browser has the API is only knowable after mount, and rendering
   // it differently before and after would be a hydration mismatch.
@@ -200,8 +213,13 @@ export function useSpeechToText(onText: (text: string) => void) {
     const rec = new Ctor();
     rec.continuous = true;
     rec.interimResults = true;
-    // No `lang`, so the engine works the language out from the speech itself and
-    // reports it back on each phrase. See the note at the top of this file.
+    // The chosen language is pinned on the instance. Leaving it unset is not
+    // "detect it yourself" - Chrome resolves it to its own UI language, which is
+    // the whole English-only bug - so the page always passes one. Restarting a
+    // paused session re-reads `langRef`, which is how a mid-session switch takes
+    // effect on the next recogniser.
+    const chosen = langRef.current;
+    if (chosen) rec.lang = chosen;
 
     rec.onresult = (event) => {
       const phrases: Phrase[] = [];

@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
   composeDictation,
@@ -91,7 +92,8 @@ test("the whole transcript is rebuilt, so a dropped event leaves no hole", () =>
 
 test("the language is read from the newest phrase that reported one", () => {
   assert.equal(splitTranscript([phrase("مرحبا", true, "ar-EG")]).detected, "ar-EG");
-  // Switching mid-session is the whole reason `lang` is left unset.
+  // The engine reports a language per phrase rather than per session, so the
+  // newest one is the honest label to show.
   const switched = splitTranscript([
     phrase("what time", true, "en-US"),
     phrase("امتى", true, "ar-EG"),
@@ -160,4 +162,26 @@ test("stopping on purpose is what ends it", () => {
   // `wantRef` decides this, not the error code, but the policy has to agree: a
   // deliberate stop must not look like something to retry.
   assert.equal(shouldRestart("aborted"), false);
+});
+
+const speechSrc = readFileSync(new URL("../src/lib/speech.ts", import.meta.url), "utf8");
+
+test("dictation is pinned to an explicit language, never the browser's", () => {
+  // An unset `lang` does not make Chrome detect the speech - it quietly uses the
+  // browser's own UI language, which is the whole English-only bug. Every
+  // recognition session gets the chosen language on the instance.
+  assert.match(speechSrc, /export type DictationLang = "ar" \| "en";/);
+  assert.match(speechSrc, /const chosen = langRef\.current/);
+  assert.match(speechSrc, /if \(chosen\) rec\.lang = chosen/);
+});
+
+test("the page passes the chosen language into every session", () => {
+  // The hook default is "no opinion", which resolves to the browser's language.
+  // The page always pins one, and this test exists so a future edit cannot
+  // silently take that away again.
+  const page = readFileSync(
+    new URL("../src/app/(app)/assistant/page.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(page, /useSpeechToText\(\(text\) => setInput\(text\), recLang\)/);
 });

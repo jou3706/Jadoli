@@ -36,7 +36,7 @@ import { QuizBuilder } from "@/components/ai/quiz-builder";
 import { MessageActions, MessageEditor } from "@/components/ai/message-actions";
 import { QuizSession } from "@/components/review/quiz-session";
 import { MODELS, PROVIDER_ORDER, findModel, type ModelDef } from "@/lib/ai/models";
-import { useSpeechToText } from "@/lib/speech";
+import { useSpeechToText, type DictationLang } from "@/lib/speech";
 import { nowCairo } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
@@ -46,6 +46,7 @@ import type { Attachment, Id } from "@/lib/db/types";
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_PDF_BYTES = 15 * 1024 * 1024;
 const MODE_KEY = "jadoli:assistant-mode";
+const DICT_LANG_KEY = "jadoli:dictation-lang";
 
 /**
  * The order the providers are offered in, and what to call them.
@@ -123,6 +124,7 @@ export default function AssistantPage() {
   const [showChats, setShowChats] = useState(false);
   /** The question being rewritten in place, if any. */
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [recLang, setRecLang] = useState<DictationLang>("ar");
   const fileRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -130,7 +132,7 @@ export default function AssistantPage() {
 
   // Dictation writes straight into the box below, which is why it takes the
   // setter rather than a value it keeps to itself.
-  const speech = useSpeechToText((text) => setInput(text));
+  const speech = useSpeechToText((text) => setInput(text), recLang);
 
   const chats = useChats();
   // In-flight turns carry the streaming text and the applied-action badges;
@@ -243,6 +245,52 @@ export default function AssistantPage() {
       /* ignore */
     }
   };
+
+  // The dictation language survives a reload, like the mode does. Read after
+  // mount for the same reason: this component is rendered once on the server,
+  // where there is no localStorage.
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(DICT_LANG_KEY);
+      if (saved === "ar" || saved === "en") setRecLang(saved);
+    } catch {
+      /* private mode: keep the default */
+    }
+  }, []);
+
+  const pickRecLang = (lang: DictationLang) => {
+    setRecLang(lang);
+    try {
+      window.localStorage.setItem(DICT_LANG_KEY, lang);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const restartTimerRef = useRef<number | null>(null);
+
+  /** Switches the recognition language, restarting a live session so the change
+   * takes effect now rather than on the next dictation. */
+  const toggleRecLang = () => {
+    const next: DictationLang = recLang === "ar" ? "en" : "ar";
+    pickRecLang(next);
+    if (!speech.listening) return;
+    speech.stop();
+    // start() while the previous instance is still ending throws, so the restart
+    // waits for it to finish. Guarded against double-taps: the newest tap wins.
+    if (restartTimerRef.current !== null) window.clearTimeout(restartTimerRef.current);
+    restartTimerRef.current = window.setTimeout(() => {
+      restartTimerRef.current = null;
+      speech.start(input);
+    }, 300);
+  };
+
+  useEffect(
+    () => () => {
+      if (restartTimerRef.current !== null) window.clearTimeout(restartTimerRef.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     let alive = true;
@@ -937,6 +985,21 @@ export default function AssistantPage() {
           aria-label={tr("ارفع صورة", "Attach a file")}
         >
           <Paperclip className="h-4 w-4" />
+        </Button>
+
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-12 w-12 shrink-0 text-xs font-bold"
+          disabled={!speech.supported}
+          onClick={toggleRecLang}
+          aria-label={tr("تبديل لغة الإملاء", "Switch dictation language")}
+          title={tr(
+            `لغة الإملاء: ${recLang === "ar" ? "عربي" : "إنجليزي"} — اضغط للتبديل`,
+            `Dictation language: ${recLang === "ar" ? "Arabic" : "English"} — tap to switch`,
+          )}
+        >
+          {recLang === "ar" ? "عربي" : "EN"}
         </Button>
 
         <Button
