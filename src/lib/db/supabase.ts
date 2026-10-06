@@ -132,7 +132,15 @@ export class SupabaseBackend implements Backend {
 
   /** Called by the auth provider once a Supabase session exists. */
   attachUser(userId: string | null) {
+    const changed = this.userId !== userId;
     this.userId = userId;
+    // A token refresh, a profile update or a re-verified session all re-attach
+    // the same person. Resetting the per-account state for those would drop any
+    // write parked while a sync is running: `runSync()` reads the queue up
+    // front, so an op enqueued in the meantime would be wiped from memory and
+    // then persisted as an empty queue — gone for good. Only an actual account
+    // change clears the snapshot and the queue, which belong to that account.
+    if (!changed) return;
     // Both the snapshot and the queue are namespaced by account, so signing in
     // as somebody else has to re-read them. Carrying the previous account's
     // rows in memory would show one person's schedule to the next, and sending
@@ -250,7 +258,15 @@ export class SupabaseBackend implements Backend {
    */
   private cache = new Map<string, { at: number; rows: unknown[] }>();
 
+  /**
+   * Bumped on every write. A read records the value when it starts and skips
+   * caching if it changed before the answer arrived — a read that began before
+   * a write landed carries a view of the rows the write just replaced.
+   */
+  private gen = 0;
+
   private bump() {
+    this.gen++;
     this.cache.clear();
   }
 
@@ -484,6 +500,9 @@ export class SupabaseBackend implements Backend {
     const key = `${owner ?? "anon"}|${name}|${JSON.stringify(q.where ?? null)}|${JSON.stringify(q.sort ?? null)}|${q.limit ?? ""}`;
     const hit = this.cache.get(key);
     if (hit) return hit.rows as EntityMap[E][];
+    // Recorded before the fetch: a write that lands while this read is in flight
+    // must not let the older answer be cached over it.
+    const startGen = this.gen;
 
     let rows: EntityMap[E][];
     try {
@@ -513,6 +532,10 @@ export class SupabaseBackend implements Backend {
       rows = selectFromSnapshot(snap, name, q.where, q.sort, q.limit) as EntityMap[E][];
     }
 
+    // A write landed while this was in flight, so the answer predates it and
+    // must not be cached over the newer rows. The rows are still returned —
+    // the fetch already used them — but the next read asks the server again.
+    if (this.gen !== startGen) return rows;
     this.cache.set(key, { at: Date.now(), rows });
     return rows;
   }

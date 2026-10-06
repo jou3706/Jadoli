@@ -3,7 +3,7 @@
 import { forwardRef } from "react";
 import { Layers } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
-import { HOURS, TABLE_DAYS, colorStyle, dayName, hourLabel } from "@/lib/constants";
+import { HOURS, HOUR_START, HOUR_END, TABLE_DAYS, colorStyle, dayName, hourLabel } from "@/lib/constants";
 import { lectureStatus, lectureTitle } from "@/lib/schedule";
 import { cn, formatTime, toMinutes } from "@/lib/utils";
 import type { Lecture, ReviewSession } from "@/lib/db/types";
@@ -14,11 +14,17 @@ type Cell = { h: number; span: number; lecture: Lecture | null };
 /** Packs a day's lectures into non-overlapping hour rows. */
 function layoutDay(lectures: Lecture[], day: number): Cell[] {
   const dayLectures = lectures.filter((l) => Number(l.day) === day);
-  const rows: Cell[] = [];
-  for (let h = 8; h < 20; ) {
-    const match = dayLectures.find(
-      (l) => Math.floor(toMinutes(l.start_time) / 60) === h,
+  // The header is a fixed 08:00-20:00 grid, but a lecture can start outside it
+  // (a 07:00 lecture, or one exported at 20:30). Pin the start into the grid so
+  // the row is drawn in the column it falls into instead of vanishing.
+  const startSlot = (l: Lecture) =>
+    Math.min(
+      HOUR_END - 1,
+      Math.max(HOUR_START, Math.floor(toMinutes(l.start_time) / 60)),
     );
+  const rows: Cell[] = [];
+  for (let h = HOUR_START; h < HOUR_END; ) {
+    const match = dayLectures.find((l) => startSlot(l) === h);
     if (match) {
       const span = Math.max(
         1,
@@ -26,8 +32,11 @@ function layoutDay(lectures: Lecture[], day: number): Cell[] {
           (toMinutes(match.end_time) - toMinutes(match.start_time)) / 60,
         ),
       );
-      rows.push({ h, span, lecture: match });
-      h += span;
+      // Never spill past the final column: a lecture that runs past 20:00 is
+      // clipped to the grid instead of widening the row beyond its header.
+      const clipped = Math.min(span, HOUR_END - h);
+      rows.push({ h, span: clipped, lecture: match });
+      h += clipped;
     } else {
       rows.push({ h, span: 1, lecture: null });
       h += 1;

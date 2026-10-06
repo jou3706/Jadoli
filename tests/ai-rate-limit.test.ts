@@ -121,8 +121,11 @@ test("running out says so, and says when", async () => {
   const text = await guardSrc();
   assert.match(text, /status: 429/, "an exhausted allowance is not a 429");
   // A bare 429 leaves the client to invent a message; the header and the body
-  // field let it show the real time the allowance returns.
-  assert.match(text, /"retry-after": "3600"/);
+  // field let it show the real time the allowance returns. The header is
+  // seconds until the reset, worked out from the recorded reset moment, never
+  // a hardcoded hour.
+  assert.match(text, /"retry-after": retryAfter/);
+  assert.match(text, /Date\.now\(\)/);
   assert.match(text, /AI_RATE_LIMIT/);
   assert.match(text, /resets_at/);
 });

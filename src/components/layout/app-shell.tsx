@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/db/auth";
 import { useScheduleContext } from "@/lib/schedule-context";
 import { Sidebar } from "./sidebar";
@@ -20,6 +21,7 @@ function Spinner() {
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  const { tr } = useI18n();
   const { session, isLoading, signOut } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
@@ -60,7 +62,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 onClick={() => void signOut()}
                 className="text-xs"
               >
-                خروج
+                {tr("خروج", "Sign out")}
               </Button>
             </div>
           </div>

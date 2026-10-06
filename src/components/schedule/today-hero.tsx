@@ -84,8 +84,11 @@ export function TodayHero({ now }: { now: Date }) {
   const gpa = hours ? points / hours : 0;
 
   const attended = (attendance as Attendance[]).length;
-  const pct = today.length
-    ? Math.round((attended / today.length) * 100)
+  // Every lecture is a weekly meeting, so the week's chances are the lectures on
+  // the schedule (the same denominator the attendance page uses). Clamped: an
+  // attendance for a lecture no longer on the list must not read above 100%.
+  const pct = lectures.length
+    ? Math.min(100, Math.round((attended / lectures.length) * 100))
     : 0;
 
   const greeting =
@@ -158,7 +161,7 @@ export function TodayHero({ now }: { now: Date }) {
           <Stat icon={CheckCheck} tone={pct >= 75 ? "emerald" : "amber"}>
             {tr("حضور الأسبوع: ", "This week: ")}
             <span className="font-semibold tabular-nums">
-              {attended}/{today.length}
+              {attended}/{lectures.length}
             </span>
             <span className="text-muted-foreground">({pct}%)</span>
           </Stat>

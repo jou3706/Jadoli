@@ -268,7 +268,7 @@ export class LocalBackend implements Backend {
               `${name}.deleteMany: refusing to delete every row without { all: true }`,
             );
           }
-          delete (this.cache as Record<string, unknown>)[name];
+          (this.cache as Record<string, unknown>)[name] = {};
           this.commit();
           return;
         }

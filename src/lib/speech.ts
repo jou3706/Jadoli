@@ -167,7 +167,19 @@ export function useSpeechToText(onText: (text: string) => void, lang?: Dictation
   /** Whether the student still wants to listen. The recogniser's own state cannot
    * answer this, because it stops itself on every pause. */
   const wantRef = useRef(false);
+  /**
+   * Everything in the box that does not belong to the current session: what was
+   * there when dictation started, plus anything typed while it ran. The session's
+   * own phrases are kept in `committedRef`/`interimRef` and folded into `baseRef`
+   * on every restart, so a pause in speech never loses what was already said.
+   */
   const baseRef = useRef("");
+  const committedRef = useRef("");
+  const interimRef = useRef("");
+  /** The last recognised fault, read by `onend` to decide whether the session
+   * should start again. `no-speech`/none mean the engine paused on silence and
+   * must restart; everything else is a stop. */
+  const errorRef = useRef<string | null>(null);
   const onTextRef = useRef(onText);
   const langRef = useRef<DictationLang | undefined>(lang);
 
@@ -207,7 +219,18 @@ export function useSpeechToText(onText: (text: string) => void, lang?: Dictation
       return;
     }
     setError(null);
+    // Another recogniser may still be winding down (a language switch stops the
+    // old one right before this runs). End it first, or two live sessions fight
+    // over the microphone and the input box.
+    try {
+      recRef.current?.abort();
+    } catch {
+      /* already stopped */
+    }
     baseRef.current = base;
+    committedRef.current = "";
+    interimRef.current = "";
+    errorRef.current = null;
     wantRef.current = true;
 
     const rec = new Ctor();
@@ -222,6 +245,9 @@ export function useSpeechToText(onText: (text: string) => void, lang?: Dictation
     if (chosen) rec.lang = chosen;
 
     rec.onresult = (event) => {
+      // A recogniser that was replaced (new language, new session) must not write
+      // into a box the newer one owns, or the two would overwrite each other.
+      if (recRef.current !== rec) return;
       const phrases: Phrase[] = [];
       for (let i = 0; i < event.results.length; i++) {
         const r = event.results[i];
@@ -232,15 +258,24 @@ export function useSpeechToText(onText: (text: string) => void, lang?: Dictation
         });
       }
       const { committed, interim, detected: tag } = splitTranscript(phrases);
+      committedRef.current = committed;
+      interimRef.current = interim;
       const lang = langOf(tag);
       if (lang) setDetected(lang);
       onTextRef.current(composeDictation(baseRef.current, committed, interim));
     };
 
     rec.onerror = (event) => {
+      errorRef.current = event.error;
       // Silence and a deliberate stop both end up here; neither is a fault and
-      // neither should put an error on screen.
-      if (event.error === "no-speech" || event.error === "aborted") return;
+      // neither should put an error on screen. Silence keeps listening (the
+      // restart happens in `onend`); `aborted` is us stopping on purpose, so the
+      // next `onend` must leave it off.
+      if (event.error === "no-speech") return;
+      if (event.error === "aborted") {
+        wantRef.current = false;
+        return;
+      }
       wantRef.current = false;
       setError(
         event.error === "not-allowed" || event.error === "service-not-allowed"
@@ -252,20 +287,32 @@ export function useSpeechToText(onText: (text: string) => void, lang?: Dictation
     };
 
     rec.onend = () => {
+      if (recRef.current !== rec) return;
       // This is the silence case. Chrome ends the session after a pause even
       // though `continuous` is true, so it is started again - and only a
       // deliberate stop, or a real fault, leaves it off.
-      if (!wantRef.current) {
+      if (!wantRef.current || !shouldRestart(errorRef.current)) {
         setListening(false);
-        recRef.current = null;
+        if (recRef.current === rec) recRef.current = null;
         return;
       }
+      // The new session's results start from nothing, so everything this session
+      // heard is folded into the base before it restarts. Without this, a pause
+      // in speech silently wipes what was already dictated.
+      baseRef.current = composeDictation(
+        baseRef.current,
+        committedRef.current,
+        interimRef.current,
+      );
+      committedRef.current = "";
+      interimRef.current = "";
+      errorRef.current = null;
       try {
         rec.start();
       } catch {
         wantRef.current = false;
         setListening(false);
-        recRef.current = null;
+        if (recRef.current === rec) recRef.current = null;
       }
     };
 
@@ -276,7 +323,7 @@ export function useSpeechToText(onText: (text: string) => void, lang?: Dictation
     } catch {
       wantRef.current = false;
       setListening(false);
-      recRef.current = null;
+      if (recRef.current === rec) recRef.current = null;
     }
   }, []);
 
@@ -299,6 +346,15 @@ export function useSpeechToText(onText: (text: string) => void, lang?: Dictation
     error,
     start,
     stop,
+    /**
+     * The box's current text, only called by the page when it edited the box
+     * itself while dictation was running. The recogniser scans the session's own
+     * phrases against this, so typing mid-session is preserved instead of being
+     * overwritten by the next recognised word.
+     */
+    setBase: useCallback((text: string) => {
+      baseRef.current = text;
+    }, []),
     toggle: useCallback((base: string) => {
       if (wantRef.current) stop();
       else start(base);

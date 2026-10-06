@@ -100,10 +100,10 @@ export function useChats() {
    * on `created_date` would also take rows written in the same millisecond.
    */
   const rewriteMessage = useCallback(
-    async (messageId: Id, text: string) => {
+    async (messageId: Id, text: string): Promise<Id> => {
       await msg.update(messageId, { text: text.slice(0, MAX_TEXT) });
       const index = (messages ?? []).findIndex((m: Message) => m.id === messageId);
-      if (index < 0) return;
+      if (index < 0) return messageId;
       const doomed = (messages ?? [])
         .slice(index + 1)
         .filter((m: Message) => m.chat_id === activeId);
@@ -112,6 +112,7 @@ export function useChats() {
         // both assume one write at a time.
         await msg.remove(m.id).catch(() => {});
       }
+      return messageId;
     },
     [msg, messages, activeId],
   );

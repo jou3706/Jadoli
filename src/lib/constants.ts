@@ -1,6 +1,6 @@
 export type Lang = "ar" | "en";
 
-/** Day ids 6=Saturday … 0=Sunday, 1..4 Monday–Thursday. Egyptian week. */
+/** Day ids 6=Saturday … 0=Sunday, 1..4 Monday–Thursday, 5=Friday. Egyptian week. */
 export const DAYS = [
   { id: 6, ar: "السبت", en: "Saturday", arShort: "سبت", enShort: "Sat" },
   { id: 0, ar: "الأحد", en: "Sunday", arShort: "أحد", enShort: "Sun" },
@@ -8,6 +8,7 @@ export const DAYS = [
   { id: 2, ar: "الثلاثاء", en: "Tuesday", arShort: "ثلاثاء", enShort: "Tue" },
   { id: 3, ar: "الأربعاء", en: "Wednesday", arShort: "أربعاء", enShort: "Wed" },
   { id: 4, ar: "الخميس", en: "Thursday", arShort: "خميس", enShort: "Thu" },
+  { id: 5, ar: "الجمعة", en: "Friday", arShort: "جمعة", enShort: "Fri" },
 ] as const;
 
 export const dayName = (id: number, lang: Lang) => {

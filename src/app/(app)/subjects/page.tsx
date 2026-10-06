@@ -25,7 +25,7 @@ import { SubjectCoverTile } from "@/components/subjects/subject-cover";
 import { AddMaterialRow } from "@/components/subjects/add-material-row";
 import { SubjectMaterialsDialog } from "@/components/subjects/subject-materials-dialog";
 import { SubjectEventsDialog } from "@/components/subjects/subject-events-dialog";
-import { eventsForSubject, todayISO } from "@/lib/subject-events";
+import { eventsForSubject, sameSubject, todayISO } from "@/lib/subject-events";
 import { isDue, type SrsCard } from "@/lib/srs";
 import { GenerateCardsDialog } from "@/components/review/generate-cards-dialog";
 import type { Lecture, Material, SubjectEvent } from "@/lib/db/types";
@@ -74,22 +74,19 @@ function SubjectCard({
   const cardDue = useMemo(
     () =>
       allCards.filter(
-        (c) =>
-          (c.subject_key || "").trim() === name.trim() &&
-          isDue(c as SrsCard, todayISO(new Date())),
+        (c) => sameSubject(c.subject_key, name) && isDue(c as SrsCard, todayISO(new Date())),
       ).length,
     [allCards, name],
   );
   const cardTotal = useMemo(
-    () =>
-      allCards.filter((c) => (c.subject_key || "").trim() === name.trim()).length,
+    () => allCards.filter((c) => sameSubject(c.subject_key, name)).length,
     [allCards, name],
   );
 
   const first = sessions[0] ?? materials[0];
   const en = sessions[0]?.subject_en ?? "";
   const c = colorStyle(first?.color ?? "indigo");
-  const row = subjects.find((s) => s.name === name) ?? null;
+  const row = subjects.find((s) => sameSubject(s.name, name)) ?? null;
 
   const totalHours = sessions.reduce((acc, l) => {
     const [sh, sm] = l.start_time.split(":").map(Number);
@@ -390,11 +387,13 @@ export default function SubjectsPage() {
     [lectures, search],
   );
 
-  /** Materials matched to their course; the same list can hold loose rows. */
+  /** Materials matched to their course; the same list can hold loose rows.
+   *  Keyed case-insensitively so a lecture filed as "PHYSICS 101" and materials
+   *  filed as "Physics 101" land on the same card. */
   const bySubject = useMemo(() => {
     const map = new Map<string, Material[]>();
     for (const m of materials) {
-      const key = (m.subject_key || "").trim();
+      const key = (m.subject_key || "").trim().toLowerCase();
       if (!key) continue;
       const list = map.get(key);
       if (list) list.push(m);
@@ -449,8 +448,14 @@ export default function SubjectsPage() {
       <SubjectCard
         key={name}
         name={name}
-        sessions={groups.find((g) => g[0]?.subject_name === name) ?? []}
-        materials={bySubject.get(name) ?? []}
+        // One course may hold lectures filed under two spellings; all of them
+        // belong to the same card.
+        sessions={
+          groups
+            .filter((g) => g[0] && sameSubject(g[0].subject_name, name))
+            .flat()
+        }
+        materials={bySubject.get(name.trim().toLowerCase()) ?? []}
         allMaterials={materials}
       />
     ))}

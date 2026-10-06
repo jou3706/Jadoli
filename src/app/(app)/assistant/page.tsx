@@ -373,7 +373,7 @@ export default function AssistantPage() {
     base?: Turn[];
     history?: { role: "user" | "assistant"; text: string }[];
     keepAttachments?: Attachment[];
-    persistUser?: (chatId: Id) => Promise<void>;
+    persistUser?: (chatId: Id) => Promise<Id | undefined>;
   }) => {
     const question = (opts?.question ?? input).trim();
     if (!question || busy) return;
@@ -415,7 +415,11 @@ export default function AssistantPage() {
     const chatId = await chats.ensureChat(question).catch(() => null);
     if (chatId) {
       if (opts?.persistUser) {
-        await opts.persistUser(chatId).catch(() => {});
+        // A rewrite keeps the question's own row; adopting that id means a second
+        // edit targets the persisted row instead of the optimistic one the
+        // database has never seen.
+        const rowId = await opts.persistUser(chatId).catch(() => undefined);
+        if (rowId) patchTurn(userId, { id: rowId });
       } else {
         const row = await chats.saveMessage(chatId, "user", question).catch(() => null);
         // Adopt the stored id, so this question can still be rewritten later. A
@@ -543,6 +547,7 @@ export default function AssistantPage() {
       keepAttachments: target.images,
       persistUser: async () => {
         await chats.rewriteMessage(messageId, text);
+        return messageId;
       },
     });
   };
@@ -1035,7 +1040,13 @@ export default function AssistantPage() {
         <Textarea
           value={input}
           rows={1}
-          onChange={(e) => setInput(e.target.value)}
+          onChange={(e) => {
+            const v = e.target.value;
+            setInput(v);
+            // Editing by hand while the microphone is on must survive the next
+            // recognised word, which recomposes the whole box from its base.
+            if (speech.listening) speech.setBase(v);
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();

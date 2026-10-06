@@ -31,6 +31,11 @@ const WINDOW_MINUTES = 60;
 /** How the caller is told they have run out, in the app's own words. */
 function refused(language: "ar" | "en", resetsAt: string | null) {
   const when = resetsAt ? new Date(resetsAt).toISOString() : null;
+  // The header speaks seconds; the body carries the moment itself. A fixed
+  // "3600" here told the retry logic an hour even when the window resets sooner.
+  const retryAfter = when
+    ? String(Math.max(1, Math.ceil((new Date(when).getTime() - Date.now()) / 1000)))
+    : "3600";
   return NextResponse.json(
     {
       error: "AI_RATE_LIMIT",
@@ -43,7 +48,7 @@ function refused(language: "ar" | "en", resetsAt: string | null) {
     {
       status: 429,
       headers: {
-        "retry-after": "3600",
+        "retry-after": retryAfter,
         // So a client can show the time instead of just refusing.
         "x-ratelimit-remaining": "0",
       },
