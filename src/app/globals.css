@@ -177,3 +177,79 @@ body {
   background: inherit;
   animation: jadoli-ping 1.4s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
+
+/* ── Interactive tour (intro.js) ───────────────────────────── */
+.introjs-overlay {
+  background-color: rgba(2, 6, 23, 0.72) !important;
+}
+.dark .introjs-overlay {
+  background-color: rgba(0, 0, 0, 0.8) !important;
+}
+
+.introjs-tooltip {
+  direction: rtl;
+  text-align: right;
+  font-family: var(--font-body);
+  border-radius: var(--radius-lg);
+  max-width: min(88vw, 360px);
+}
+.introjs-tooltip-title,
+.introjs-tooltiptext {
+  font-family: var(--font-body);
+}
+.introjs-tooltip-title {
+  font-family: var(--font-heading);
+  line-height: 1.5;
+}
+.introjs-button {
+  font-family: var(--font-body);
+  border-radius: var(--radius-md);
+}
+.introjs-skipbutton {
+  color: hsl(var(--muted-foreground));
+}
+.introjs-progressbar {
+  background-color: hsl(var(--primary));
+}
+.introjs-showElement {
+  outline: 4px solid hsl(var(--primary) / 0.55) !important;
+  outline-offset: 2px;
+}
+
+.dark .introjs-tooltip {
+  background: hsl(var(--popover));
+  color: hsl(var(--popover-foreground));
+  box-shadow: 0 12px 48px rgb(0 0 0 / 0.55);
+}
+.dark .introjs-tooltip-title,
+.dark .introjs-tooltiptext {
+  color: hsl(var(--foreground));
+}
+.dark .introjs-arrow.top,
+.dark .introjs-arrow.top-right,
+.dark .introjs-arrow.top-middle {
+  border-bottom-color: hsl(var(--popover));
+}
+.dark .introjs-arrow.bottom,
+.dark .introjs-arrow.bottom-right,
+.dark .introjs-arrow.bottom-middle {
+  border-top-color: hsl(var(--popover));
+}
+.dark .introjs-arrow.left {
+  border-right-color: hsl(var(--popover));
+}
+.dark .introjs-arrow.right {
+  border-left-color: hsl(var(--popover));
+}
+.dark .introjs-button {
+  background: hsl(var(--secondary));
+  color: hsl(var(--secondary-foreground));
+  border-color: hsl(var(--border));
+}
+.dark .introjs-button:hover {
+  background: hsl(var(--accent));
+  color: hsl(var(--accent-foreground));
+}
+.dark .introjs-progress {
+  background: hsl(var(--muted));
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/db/auth";
@@ -12,6 +13,13 @@ import { ThemeToggle, } from "./theme-toggle";
 import { LangToggle } from "./lang-toggle";
 import { PageGuide } from "./page-guide";
 import { Button } from "@/components/ui/button";
+
+/** intro.js only loads when a tour actually runs, not with every page. */
+const TourGuideHost = dynamic(
+  () =>
+    import("@/components/tour/tour-guide").then((m) => m.TourGuideHost),
+  { ssr: false },
+);
 
 function Spinner() {
   return (
@@ -68,6 +76,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
           <PageGuide />
+          <TourGuideHost />
           {children}
         </main>
       </div>

@@ -6,6 +6,7 @@ import { BookOpen, CheckCircle2, ListChecks, Sparkles, X } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/db/auth";
 import { pageGuideFor, readPageSeen, markPageSeen } from "@/lib/page-guides";
+import { readTourSeen, tourForPath } from "@/lib/tour";
 import { Button } from "@/components/ui/button";
 import type { Lang } from "@/lib/utils";
 
@@ -34,7 +35,18 @@ export function PageGuide() {
 
   useEffect(() => {
     const g = pageGuideFor(pathname);
-    if (!g || !uid || readPageSeen(uid, g.key)) {
+    const t = tourForPath(pathname);
+    if (!g || !uid) {
+      setOpen(false);
+      return;
+    }
+    // A page with a tour is taught by the tour on its first visit; the static
+    // card stays out of the way while the tour has not been seen yet.
+    if (t && !readTourSeen(uid, t.key)) {
+      setOpen(false);
+      return;
+    }
+    if (readPageSeen(uid, g.key)) {
       setOpen(false);
       return;
     }

@@ -19,7 +19,10 @@ export function DayTabs({
   const { tr, lang } = useI18n();
 
   return (
-    <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 scrollbar-thin lg:mx-0 lg:px-0">
+    <div
+      data-tour="day-tabs"
+      className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 scrollbar-thin lg:mx-0 lg:px-0"
+    >
       {DAYS.map((d) => {
         const active = d.id === value;
         const isToday = d.id === today;

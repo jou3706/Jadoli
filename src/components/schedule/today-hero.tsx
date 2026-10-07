@@ -99,7 +99,10 @@ export function TodayHero({ now }: { now: Date }) {
         : tr("مساء الخير 👋", "Good evening 👋");
 
   return (
-    <div className="rounded-2xl border bg-gradient-to-l from-primary/5 to-card p-4 sm:p-5">
+    <div
+      data-tour="today-hero"
+      className="rounded-2xl border bg-gradient-to-l from-primary/5 to-card p-4 sm:p-5"
+    >
       <div className="flex items-center gap-2">
         <BookOpen className="h-5 w-5 text-primary" />
         <h2 className="font-display text-lg font-bold">{greeting}</h2>

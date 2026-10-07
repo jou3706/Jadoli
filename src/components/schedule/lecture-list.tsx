@@ -56,9 +56,12 @@ export function LectureList({
         a.end_time.localeCompare(b.end_time),
     );
 
-  if (!todays.length) {
+if (!todays.length) {
     return (
-      <div className="rounded-2xl border border-dashed bg-card p-10 text-center text-muted-foreground">
+      <div
+        data-tour="lecture-list"
+        className="rounded-2xl border border-dashed bg-card p-10 text-center text-muted-foreground"
+      >
         <p className="font-medium">{tr("مفيش محاضرات في اليوم ده", "No lectures this day")}</p>
         {editMode && (
           <Button className="mt-3" onClick={() => openForm({ day } as Lecture)}>
@@ -69,8 +72,8 @@ export function LectureList({
     );
   }
 
-  return (
-    <div className="space-y-3">
+return (
+    <div data-tour="lecture-list" className="space-y-3">
       {todays.map((l) => (
         <LectureCard
           key={l.id}

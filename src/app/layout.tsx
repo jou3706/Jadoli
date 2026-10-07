@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Cairo, Tajawal } from "next/font/google";
+import "intro.js/introjs.css";
 import "./globals.css";
 import { Providers } from "@/components/providers";
 

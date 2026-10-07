@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Bell, BellRing, Check, CloudOff, CloudUpload, HelpCircle, LogOut, Pencil, Search, X } from "lucide-react";
+import { Bell, BellRing, Check, CloudOff, CloudUpload, HelpCircle, LogOut, Pencil, Route, Search, X } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/db/auth";
 import { useList, useOffline } from "@/lib/db/store";
@@ -11,6 +11,7 @@ import { AlarmSoundToggle } from "@/components/subjects/event-alarm";
 import { ScreenWakeToggle } from "./screen-wake-toggle";
 import { PushToggle } from "./push-toggle";
 import { PAGE_GUIDE_EVENT } from "./page-guide";
+import { startTour } from "@/lib/tour";
 import { useScheduleContext } from "@/lib/schedule-context";
 import { nowCairo } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -162,6 +163,20 @@ export function Header({
 
           <Button
             variant="ghost"
+            size="sm"
+            aria-label={tr("الجولة التعليمية", "Guided tour")}
+            title={tr("الجولة التعليمية", "Guided tour")}
+            onClick={startTour}
+            className="hidden h-9 gap-1.5 sm:inline-flex"
+          >
+            <Route className="h-4 w-4" />
+            <span className="hidden md:inline">
+              {tr("جولة", "Tour")}
+            </span>
+          </Button>
+
+          <Button
+            variant="ghost"
             size="icon"
             aria-label={tr("دليل الصفحة", "Page guide")}
             title={tr("دليل الصفحة", "Page guide")}
@@ -172,7 +187,7 @@ export function Header({
             <HelpCircle className="h-4 w-4" />
           </Button>
 
-          <div className="relative hidden sm:block">
+          <div className="relative hidden sm:block" data-tour="search">
             <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={term}

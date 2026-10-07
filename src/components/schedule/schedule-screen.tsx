@@ -187,6 +187,7 @@ export function ScheduleScreen() {
             onClick={() => setEditMode((p) => !p)}
             variant={editMode ? "default" : "outline"}
             className="hidden h-12 w-full gap-2 text-base lg:flex"
+            data-tour="edit-schedule"
           >
             {editMode ? <Check className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
             {editMode

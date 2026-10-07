@@ -50,6 +50,7 @@ export function MobileNav({
           <button
             type="button"
             onClick={onAdd}
+            data-tour="add-lecture"
             aria-label={tr("إضافة محاضرة", "Add lecture")}
             className="mx-1 flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg active:scale-95"
           >
