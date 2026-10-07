@@ -8,7 +8,16 @@ import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/db/auth";
 import { AuthShell } from "@/components/layout/auth-shell";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Field, Input } from "@/components/ui/input";
+import { hasPrivacyConsent, markPrivacyConsent } from "@/lib/privacy-consent";
 
 function GoogleMark() {
   return (
@@ -41,6 +50,20 @@ export function LoginScreen() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [consentOpen, setConsentOpen] = useState(false);
+  const [consentAgreed, setConsentAgreed] = useState(false);
+  const [consentError, setConsentError] = useState("");
+
+  const startGoogle = async () => {
+    setError("");
+    setBusy(true);
+    try {
+      await signInWithGoogle();
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(false);
+    }
+  };
 
   return (
     <AuthShell
@@ -71,14 +94,14 @@ export function LoginScreen() {
               variant="outline"
               className="h-12 w-full text-base"
               disabled={busy}
-              onClick={async () => {
+              onClick={() => {
                 setError("");
-                setBusy(true);
-                try {
-                  await signInWithGoogle();
-                } catch (err) {
-                  setError((err as Error).message);
-                  setBusy(false);
+                if (!hasPrivacyConsent()) {
+                  setConsentError("");
+                  setConsentAgreed(false);
+                  setConsentOpen(true);
+                } else {
+                  void startGoogle();
                 }
               }}
             >
@@ -151,6 +174,75 @@ export function LoginScreen() {
           </p>
         )}
       </form>
+
+      <Dialog open={consentOpen} onOpenChange={setConsentOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>
+              {tr("خطوة واحدة قبل جوجل", "One step before Google")}
+            </DialogTitle>
+            <DialogDescription>
+              {tr(
+                "عمل حساب من خلال جوجل بيحتاج موافقتك الأول على سياسة الخصوصية.",
+                "Creating an account with Google first requires your consent to the Privacy Policy.",
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <label className="flex items-start gap-2 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={consentAgreed}
+              onChange={(e) => setConsentAgreed(e.target.checked)}
+              className="mt-0.5 h-4 w-4 accent-primary"
+            />
+            <span>
+              {tr("أوافق، قرأت ", "I have read and agree to the ")}
+              <Link
+                href="/privacy"
+                target="_blank"
+                className="font-semibold text-primary underline"
+              >
+                {tr("سياسة الخصوصية", "Privacy Policy")}
+              </Link>
+            </span>
+          </label>
+
+          {consentError && (
+            <p className="text-sm text-destructive">{consentError}</p>
+          )}
+
+          <DialogFooter className="sm:justify-between">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setConsentOpen(false)}
+            >
+              {tr("إلغاء", "Cancel")}
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                if (!consentAgreed) {
+                  setConsentError(
+                    tr(
+                      "لازم توافق على سياسة الخصوصية الأول",
+                      "You need to accept the Privacy Policy first",
+                    ),
+                  );
+                  return;
+                }
+                setConsentError("");
+                markPrivacyConsent();
+                setConsentOpen(false);
+                void startGoogle();
+              }}
+            >
+              {tr("أوافق وكمل مع جوجل", "Agree and continue with Google")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AuthShell>
   );
 }
