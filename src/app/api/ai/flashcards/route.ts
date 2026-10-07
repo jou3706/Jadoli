@@ -98,7 +98,7 @@ export async function POST(req: Request) {
   try {
     raw = await completeJson(
       taskModel("flashcards", attached.length > 0),
-      buildFlashcardsPrompt(language, count),
+      buildFlashcardsPrompt(count),
       instruction,
       attached.map((m) => ({ dataUrl: m.dataUrl, mime: m.mime })),
       ac.signal,

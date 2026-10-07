@@ -106,7 +106,7 @@ delete_grade in this mode; they are rejected.`;
  * happily write "What is this lecture about?", which is not a question anyone
  * can fail, and a queue full of those is a queue that gets skipped.
  */
-export function buildFlashcardsPrompt(language: "ar" | "en", count: number) {
+export function buildFlashcardsPrompt(count: number) {
   return `You write revision flashcards from a student's own lecture notes.
 
 Return ONLY a JSON array. No prose, no markdown fence. Each element:
@@ -131,9 +131,10 @@ Return ONLY a JSON array. No prose, no markdown fence. Each element:
 - Short enough to read in one breath. If it needs a paragraph, it is two cards.
 
 # Language
-Write the cards in ${language === "ar" ? "Arabic" : "English"} — the same language as the
-notes, and the same language the student asked in. Keep the course's own subject
-terms.
+Write the cards in the same language as the notes and the attached materials
+themselves: an English lecture file gets English cards, an Arabic one gets Arabic
+cards, whatever language this conversation is running in. Do not translate the
+source — the card must keep the terms the lecture actually uses.
 
 # How many
 Return exactly ${count} cards if the notes hold that many good ones. Fewer if they
