@@ -8,18 +8,67 @@
 -- row is pruned when the push service reports it gone, and nothing has to be
 -- re-set-up by hand.
 --
--- TWO THINGS TO EDIT BEFORE RUNNING THIS FILE:
---
---   1. `<YOUR_APP_URL>` - the origin the app is served from, no trailing slash.
---   2. `<PUSH_CRON_SECRET>` - the same string as PUSH_CRON_SECRET on Vercel.
---      Generate one with:  openssl rand -hex 32
---
--- And one thing to enable in the dashboard first, because SQL cannot do it:
+-- ONE THING TO ENABLE IN THE DASHBOARD FIRST, because SQL cannot do it:
 -- Supabase → Database → Extensions → enable `pg_cron` and `pg_net`. A `create
 -- extension` for either one fails from here with a permission error, which is the
 -- extension not being enabled rather than the statement being wrong.
+--
+-- The job needs two pieces of information that are not the database's to invent:
+-- the URL of the deployed app, and the secret that identifies this cron job to
+-- it. Both once sat in this file as literals, which made this file (and therefore
+-- the git repository) a copy of a secret. They now live in `app_secrets`, a table
+-- that is closed to browsers, and the job reads them on every tick. Setting them
+-- is one line each:
+--
+--   select public.set_secret('push_api_url', 'https://your-app.example/api/push/send');
+--   select public.set_secret('push_cron_secret', '<openssl rand -hex 32>');
+--
+-- and PUSH_CRON_SECRET on Vercel must be the SAME string as push_cron_secret. The
+-- two values seeded below are placeholders on purpose; replace them before launch.
 
 begin;
+
+-- ─────────────────────────────────────────────────────────────
+-- Job configuration (closed to browsers)
+-- ─────────────────────────────────────────────────────────────
+
+create table if not exists public.app_secrets (
+  name  text primary key,
+  value text not null
+);
+
+alter table public.app_secrets enable row level security;
+
+-- RLS on with no policies, and the functions revoked below, means the only way
+-- in is the SQL editor (or another security-definer function running as
+-- postgres): a student's browser cannot read or write any of it.
+create or replace function public.get_secret(p_name text)
+returns text
+language sql
+security definer
+set search_path = public
+as $$
+  select value from public.app_secrets where name = p_name
+$$;
+
+create or replace function public.set_secret(p_name text, p_value text)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  insert into public.app_secrets (name, value) values (p_name, p_value)
+  on conflict (name) do update set value = excluded.value
+$$;
+
+revoke all on function public.get_secret(text) from public, anon, authenticated;
+revoke all on function public.set_secret(text, text) from public, anon, authenticated;
+
+-- Seeds are `do nothing` so re-running this file never clobbers a real value.
+insert into public.app_secrets (name, value) values
+  ('push_api_url', 'https://jadoli.vercel.app/api/push/send'),
+  ('push_cron_secret', 'replace-me-before-going-live')
+on conflict (name) do nothing;
 
 -- ─────────────────────────────────────────────────────────────
 -- Subscriptions
@@ -123,10 +172,10 @@ select cron.schedule(
   '* * * * *',
   $cron$
     select net.http_post(
-      url     := 'https://jadoli.vercel.app/api/push/send',
+      url     := public.get_secret('push_api_url'),
       headers := jsonb_build_object(
         'Content-Type',  'application/json',
-        'x-cron-secret', '8e85472e2ca31d45aa67beb3a04806bc9b10c3181eabed6b50d61a34c6758387'
+        'x-cron-secret', public.get_secret('push_cron_secret')
       ),
       body    := '{}'::jsonb
     )

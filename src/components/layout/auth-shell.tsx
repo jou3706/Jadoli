@@ -52,6 +52,10 @@ export function AuthShell({
 
         <p className="text-sm text-primary-foreground/70">
           © {new Date().getFullYear()} Jadoli
+          <span className="mx-2">·</span>
+          <Link href="/privacy" className="underline">
+            {tr("سياسة الخصوصية", "Privacy policy")}
+          </Link>
         </p>
       </aside>
 
@@ -81,6 +85,12 @@ export function AuthShell({
                 {footer}
               </div>
             )}
+
+            <p className="pt-2 text-center text-xs text-muted-foreground lg:hidden">
+              <Link href="/privacy" className="underline">
+                {tr("سياسة الخصوصية", "Privacy policy")}
+              </Link>
+            </p>
           </div>
         </div>
       </main>

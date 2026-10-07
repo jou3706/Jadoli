@@ -397,8 +397,9 @@ test("every route the app can open is reachable offline", async () => {
     "/attendance",
     "/subjects",
     "/import",
-    "/assistant",
-    "/widget",
+"/assistant",
+  "/widget",
+  "/privacy",
   ];
   for (const r of routes) {
     const res = await handle(h, r, "navigate");
