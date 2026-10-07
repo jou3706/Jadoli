@@ -8,7 +8,7 @@
  * that predates the guide gets it once, and so does every account after them.
  */
 
-const NS = "jadoli_onboard_seen";
+const NS = "jadwali_onboard_seen";
 
 export const readOnboardingSeen = (who: string): boolean => {
   try {

@@ -1,4 +1,4 @@
--- Jadoli — migration: subject covers + file storage
+-- Jadwali — migration: subject covers + file storage
 -- Run this once in the Supabase SQL editor (Dashboard → SQL Editor → New query).
 -- It is additive: safe to run more than once.
 

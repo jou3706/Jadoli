@@ -18,7 +18,7 @@ export default function PrivacyPage() {
             className="flex items-center gap-2 font-display font-bold text-primary"
           >
             <CalendarDays className="h-5 w-5" />
-            {tr("جدولي", "Jadoli")}
+            {tr("جدولي", "Jadwali")}
           </Link>
           <Link
             href="/login"

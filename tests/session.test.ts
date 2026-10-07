@@ -96,7 +96,7 @@ test("the session in storage is read even when its token has expired", () => {
     expires_at: Math.floor((now - HOUR) / 1000),
     user: { id: "u1", email: "a@b.c" },
   });
-  const storage = { getItem: (k: string) => (k === "jadoli_sb_session" ? expired : null) };
+  const storage = { getItem: (k: string) => (k === "jadwali_sb_session" ? expired : null) };
   const read = readStoredSession(storage);
   assert.equal(read?.user?.id, "u1", "the person is still here");
   assert.equal(read?.access_token, "stale");
@@ -110,12 +110,12 @@ test("an empty storage is a real sign-out", () => {
 test("the split-storage layout is read as one session", () => {
   // With a separate user store the user object is not on the session itself.
   const items: Record<string, string> = {
-    jadoli_sb_session: JSON.stringify({
+    jadwali_sb_session: JSON.stringify({
       access_token: "tok",
       refresh_token: "ref",
       expires_at: Math.floor((now + HOUR) / 1000),
     }),
-    "jadoli_sb_session-user": JSON.stringify({ user: { id: "u9", email: "b@c.d" } }),
+    "jadwali_sb_session-user": JSON.stringify({ user: { id: "u9", email: "b@c.d" } }),
   };
   const read = readStoredSession({ getItem: (k) => items[k] ?? null });
   assert.equal(read?.user?.id, "u9");

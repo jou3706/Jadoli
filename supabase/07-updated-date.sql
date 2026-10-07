@@ -1,4 +1,4 @@
--- Jadoli — migration: updated_date on every table the app writes
+-- Jadwali — migration: updated_date on every table the app writes
 -- Run this once in the Supabase SQL editor (Dashboard → SQL Editor → New query).
 -- It is additive: safe to run more than once.
 --

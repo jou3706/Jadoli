@@ -13,7 +13,7 @@ import { alarmAt, alarmKey, alarmWindow } from "./alarm";
  * each other's alarms.
  */
 
-const NS = "jadoli_alarms";
+const NS = "jadwali_alarms";
 
 export type AlarmStore = {
   /** When each alarm last rang. */

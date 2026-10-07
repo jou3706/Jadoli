@@ -64,7 +64,7 @@ test("junk in storage reads as off, never as on", () => {
   browserStorage.clear();
   resetAlarmPrefs();
   for (const junk of ["not json", '{"sound":"yes"}', "null", '{"sound":1}']) {
-    browserStorage.set("jadoli:alarm-prefs", junk);
+    browserStorage.set("jadwali:alarm-prefs", junk);
     resetAlarmPrefs();
     assert.deepEqual(
       getAlarmPrefs(),

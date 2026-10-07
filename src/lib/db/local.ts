@@ -1,7 +1,7 @@
 import { notifyDataChanged } from "./events";
 import { ENTITY_NAMES, type EntityMap, type EntityName, type Id } from "./types";
 
-const NS = "jadoli_v1";
+const NS = "jadwali_v1";
 const dataKey = (e: EntityName) => `${NS}:${e}`;
 const versionKey = `${NS}:schema`;
 

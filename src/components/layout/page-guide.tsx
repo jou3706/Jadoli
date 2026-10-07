@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import type { Lang } from "@/lib/utils";
 
 /** Dispatched by the header's help button to reopen the current page's guide. */
-export const PAGE_GUIDE_EVENT = "jadoli:open-page-guide";
+export const PAGE_GUIDE_EVENT = "jadwali:open-page-guide";
 
 const pick = <T,>(pair: readonly [T, T], lang: Lang): T =>
   lang === "ar" ? pair[0] : pair[1];

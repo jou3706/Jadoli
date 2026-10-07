@@ -11,7 +11,7 @@ import type { Lecture } from "@/lib/db/types";
 type PermissionState = "unsupported" | NotificationPermission;
 
 /** The day a reminder was sent, per lecture, so a reload does not repeat it. */
-const NOTIFIED_KEY = "jadoli:lecture-notified";
+const NOTIFIED_KEY = "jadwali:lecture-notified";
 
 const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
 
@@ -142,7 +142,7 @@ export function useNotifications(
           "هنفكّرك قبل المحاضرات ومنبّهات الامتحانات.",
           "We'll remind you before lectures and exam alarms.",
         ),
-        tag: "jadoli-notifications-on",
+        tag: "jadwali-notifications-on",
       });
     } catch {
       /* the switch is still on; the sample just did not show */

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import vm from "node:vm";
 
-const ORIGIN = "https://jadoli.test";
+const ORIGIN = "https://jadwali.test";
 const SW = new URL("../public/sw.js", import.meta.url);
 
 /** A response shaped like the ones `fetch` hands the worker. */
@@ -63,7 +63,7 @@ function fakeCaches(initial: Entry[] = []) {
     open,
     // Two builds' worth sitting there, the older of which is the one a fix has
     // to displace.
-    keys: async () => ["jadoli-v4", "jadoli-v3"],
+    keys: async () => ["jadwali-v4", "jadwali-v3"],
     delete: async (k: string) => {
       // The default bucket stands for the cache under test, so it is what a
       // caller means when it asks for an old name to go.
@@ -73,7 +73,7 @@ function fakeCaches(initial: Entry[] = []) {
           store.delete(key);
         }
       }
-      return k !== "jadoli-v4";
+      return k !== "jadwali-v4";
     },
   };
 }
@@ -290,7 +290,7 @@ test("the page can hand the worker its build assets to keep", async () => {
   const chunk = `${ORIGIN}/_next/static/chunks/app/(app)/week/page-abc123.js`;
   let waited: Promise<unknown> = Promise.resolve();
   (h.listeners.message as (e: unknown) => void)({
-    data: { type: "jadoli:warm", urls: [chunk, "https://elsewhere.test/x.js", 42] },
+    data: { type: "jadwali:warm", urls: [chunk, "https://elsewhere.test/x.js", 42] },
     waitUntil: (p: Promise<unknown>) => {
       waited = p;
     },
@@ -313,7 +313,7 @@ test("going offline after one online visit still opens the app", async () => {
   await handle(h, chunk);
   let waited: Promise<unknown> = Promise.resolve();
   (h.listeners.message as (e: unknown) => void)({
-    data: { type: "jadoli:warm", urls: [chunk] },
+    data: { type: "jadwali:warm", urls: [chunk] },
     waitUntil: (p: Promise<unknown>) => {
       waited = p;
     },
@@ -466,7 +466,7 @@ test("the cache name changes with the build, so a fix can actually reach the bro
   const source = await readFile(SW, "utf8");
   const version = source.match(/const VERSION = "([^"]+)"/)?.[1];
   assert.ok(version, "the worker must name its cache");
-  assert.match(version, /^jadoli-v\d+$/, "the cache name should carry a build number");
+  assert.match(version, /^jadwali-v\d+$/, "the cache name should carry a build number");
 
   const h = await boot();
   let waited: Promise<unknown> = Promise.resolve();
@@ -514,7 +514,7 @@ test("a browser holding the previous build's cache is given the current one", as
   }
   // The name is what did the work: entries written under the previous build's
   // cache are the ones that went.
-  assert.deepEqual([...h.caches.owners.values()].filter((o) => o === "jadoli-v5"), []);
+  assert.deepEqual([...h.caches.owners.values()].filter((o) => o === "jadwali-v5"), []);
 });
 
 // ─────────────────────────────────────────────────────────────

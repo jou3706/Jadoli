@@ -213,7 +213,7 @@ test("a store that is not a store is read as empty, not as already fired", () =>
   // already rung, which is the quietest possible failure and the worst one.
   browserStorage.clear();
   for (const junk of ["not json", '{"fired":"yes"}', '{"fired":{"a":"soon"}}', "null"]) {
-    browserStorage.set("jadoli_alarms:alice", junk);
+    browserStorage.set("jadwali_alarms:alice", junk);
     const store = readAlarmStore("alice");
     assert.deepEqual(store, { fired: {}, snoozed: {} }, `for ${junk}`);
   }

@@ -53,7 +53,7 @@ export type SessionStorage = {
 };
 
 /** Matches the `storageKey` the client is built with in supabase-client.ts. */
-export const SUPABASE_SESSION_KEY = "jadoli_sb_session";
+export const SUPABASE_SESSION_KEY = "jadwali_sb_session";
 
 /**
  * The session as it sits in storage, read directly.

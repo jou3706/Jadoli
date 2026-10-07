@@ -172,7 +172,7 @@ export function useCrossTabSync() {
   }, []);
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
-      if (e.key?.startsWith("jadoli_v1:")) reload();
+      if (e.key?.startsWith("jadwali_v1:")) reload();
     };
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);

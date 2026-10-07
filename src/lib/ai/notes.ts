@@ -169,7 +169,7 @@ const sections = once(
   };
 }
 
-const KEY = "jadoli:material-notes";
+const KEY = "jadwali:material-notes";
 
 /**
  * Notes are cached on the device, not in the database, for the reason summaries

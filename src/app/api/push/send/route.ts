@@ -50,7 +50,7 @@ export async function POST(req: Request) {
   }
 
   webpush.setVapidDetails(
-    process.env.NEXT_PUBLIC_SITE_URL || "mailto:jadoli@example.com",
+    process.env.NEXT_PUBLIC_SITE_URL || "mailto:jadwali@example.com",
     keys.publicKey,
     keys.privateKey,
   );

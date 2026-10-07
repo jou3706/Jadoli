@@ -42,9 +42,9 @@ type AuthState = {
   mode: "local" | "supabase";
 };
 
-const ACCOUNTS_KEY = "jadoli_accounts";
-const SESSION_KEY = "jadoli_session";
-const RESETS_KEY = "jadoli_resets";
+const ACCOUNTS_KEY = "jadwali_accounts";
+const SESSION_KEY = "jadwali_session";
+const RESETS_KEY = "jadwali_resets";
 
 type StoredAccount = Session & { hash: string; created: number };
 

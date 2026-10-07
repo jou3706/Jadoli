@@ -144,7 +144,7 @@ export async function createShare(input: {
 }) {
   const payload: ShareRecord = {
     token: token(),
-    owner_name: (input.owner_name ?? "").trim() || "Jadoli",
+    owner_name: (input.owner_name ?? "").trim() || "Jadwali",
     lectures: input.lectures ?? [],
     events: input.events ?? [],
     created: Date.now(),

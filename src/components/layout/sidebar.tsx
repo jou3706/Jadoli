@@ -41,7 +41,7 @@ export function Sidebar() {
       <Link
         href="/"
         className="shrink-0 font-display text-xl font-bold text-primary"
-        aria-label="Jadoli"
+        aria-label="Jadwali"
       >
         {tr("جدولي", "Jadwali")}
       </Link>

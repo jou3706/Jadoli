@@ -61,7 +61,7 @@ export function subjectEmoji(name: string): string {
  * white text readable in both themes.
  */
 export function subjectCover(name: string): SubjectCover {
-  const h = subjectHash((name ?? "").trim() || "jadoli");
+  const h = subjectHash((name ?? "").trim() || "jadwali");
   const hue = h % 360;
   // Unsigned shifts: `>>` would go negative above 2^31 and emit hsl(-6 …).
   const hue2 = (hue + 40 + ((h >>> 8) % 60)) % 360;

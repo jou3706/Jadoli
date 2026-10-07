@@ -116,7 +116,7 @@ test("UIDs are stable per entity and unique inside a file", () => {
   const b = buildICS([lecture({ id: "abc" })], []);
   const uidA = a.match(/UID:([^\r]+)/)?.[1];
   const uidB = b.match(/UID:([^\r]+)/)?.[1];
-  assert.equal(uidA, "abc@jadoli");
+  assert.equal(uidA, "abc@jadwali");
   assert.equal(uidA, uidB, "re-exporting must not duplicate events");
 
   const two = buildICS([lecture({ id: "x" }), lecture({ id: "y", day: 4 })], []);

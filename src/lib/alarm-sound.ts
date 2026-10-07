@@ -15,7 +15,7 @@
 
 import { soundEnabled } from "./alarm-prefs";
 
-type Ctx = AudioContext & { __jadoliAlarm?: boolean };
+type Ctx = AudioContext & { __jadwaliAlarm?: boolean };
 
 let ctx: Ctx | null = null;
 
@@ -42,8 +42,8 @@ export async function unlockSound(): Promise<boolean> {
   if (!c) return false;
   try {
     if (c.state === "suspended") await c.resume();
-    c.__jadoliAlarm = c.state === "running";
-    if (!c.__jadoliAlarm) return false;
+    c.__jadwaliAlarm = c.state === "running";
+    if (!c.__jadwaliAlarm) return false;
     // A moment of near-silence, so the gesture that unlocked this counts as a
     // gesture that played something. Browsers decide on the first sound.
     const osc = c.createOscillator();

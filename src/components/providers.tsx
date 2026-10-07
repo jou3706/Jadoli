@@ -69,7 +69,7 @@ function OfflineWarmup() {
             const kind = (e as PerformanceResourceTiming).initiatorType;
             if (kind !== "beacon") add(e.name);
           }
-          if (urls.size) worker.postMessage({ type: "jadoli:warm", urls: [...urls] });
+          if (urls.size) worker.postMessage({ type: "jadwali:warm", urls: [...urls] });
         } catch {
           /* offline support is optional */
         }

@@ -1,4 +1,4 @@
--- Jadoli — Supabase schema
+-- Jadwali — Supabase schema
 -- Run this once in the Supabase SQL editor, then set
 -- NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in .env.local.
 --

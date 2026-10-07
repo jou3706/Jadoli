@@ -96,7 +96,7 @@ export function buildICS(
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//Jadoli//Study Schedule//EN",
+    "PRODID:-//Jadwali//Study Schedule//EN",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     `X-WR-TIMEZONE:${TZID}`,
@@ -128,7 +128,7 @@ export function buildICS(
     lines.push(
       "BEGIN:VEVENT",
       // Stable UID: re-exporting must not create duplicate events.
-      fold(`UID:${l.id}@jadoli`),
+      fold(`UID:${l.id}@jadwali`),
       fold(`DTSTAMP:${dtstamp}`),
       fold(`DTSTART;TZID=${TZID}:${icsTime(d, l.start_time)}`),
       fold(`DTEND;TZID=${TZID}:${icsTime(d, l.end_time)}`),
@@ -146,7 +146,7 @@ export function buildICS(
     const summary = e.title || e.title_en || "Event";
     lines.push(
       "BEGIN:VEVENT",
-      fold(`UID:${e.id}@jadoli`),
+      fold(`UID:${e.id}@jadwali`),
       fold(`DTSTAMP:${dtstamp}`),
       fold(`DTSTART;VALUE=DATE:${d}`),
       // All-day DTEND is exclusive: the day after.

@@ -1,4 +1,4 @@
-const CONSENT_KEY = "jadoli_privacy_consent";
+const CONSENT_KEY = "jadwali_privacy_consent";
 const CONSENT_VERSION = "1";
 
 /**

@@ -45,8 +45,8 @@ import type { Attachment, Id } from "@/lib/db/types";
 
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_PDF_BYTES = 15 * 1024 * 1024;
-const MODE_KEY = "jadoli:assistant-mode";
-const DICT_LANG_KEY = "jadoli:dictation-lang";
+const MODE_KEY = "jadwali:assistant-mode";
+const DICT_LANG_KEY = "jadwali:dictation-lang";
 
 /**
  * The order the providers are offered in, and what to call them.

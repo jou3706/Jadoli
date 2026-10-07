@@ -32,7 +32,7 @@ export function memoryStore(seed?: Record<string, unknown>): OfflineStore {
   };
 }
 
-const DB_NAME = "jadoli_offline";
+const DB_NAME = "jadwali_offline";
 const STORE = "kv";
 const DB_VERSION = 1;
 
@@ -129,5 +129,5 @@ export function getOfflineStore(): OfflineStore {
   return store;
 }
 
-export const snapshotKey = (owner: string) => `jadoli:offline:snapshot:${owner}`;
-export const outboxKey = (owner: string) => `jadoli:offline:outbox:${owner}`;
+export const snapshotKey = (owner: string) => `jadwali:offline:snapshot:${owner}`;
+export const outboxKey = (owner: string) => `jadwali:offline:outbox:${owner}`;

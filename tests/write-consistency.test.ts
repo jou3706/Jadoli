@@ -70,7 +70,7 @@ test("every write tells the app to re-read, so no manual refresh is needed", asy
     await b.table("Material").bulkCreate([{ title: "c" }]);
     await b.table("Material").deleteMany({ title: "c" });
     assert.equal(
-      w.events.filter((e: string) => e === "jadoli:db").length,
+      w.events.filter((e: string) => e === "jadwali:db").length,
       5,
       "each write must fire exactly one change event",
     );

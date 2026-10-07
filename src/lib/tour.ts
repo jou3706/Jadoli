@@ -521,7 +521,7 @@ export const TOURS: TourConfig[] = [
 export const tourForPath = (pathname: string): TourConfig | undefined =>
   TOURS.find((t) => t.match === pathname);
 
-const NS = "jadoli_tour_seen";
+const NS = "jadwali_tour_seen";
 
 export const readTourSeen = (who: string, key: string): boolean => {
   try {
@@ -540,7 +540,7 @@ export const markTourSeen = (who: string, key: string): void => {
 };
 
 /** Dispatched by the header's tour button to restart the current page's tour. */
-export const TOUR_START_EVENT = "jadoli:start-tour";
+export const TOUR_START_EVENT = "jadwali:start-tour";
 
 export const startTour = (): void => {
   try {

@@ -78,7 +78,7 @@ export function tidySummary(raw: RawSummary): MaterialSummary {
   return { summary: clean(raw.summary, 6000), keyPoints: points, glossary };
 }
 
-const KEY = "jadoli:material-summary";
+const KEY = "jadwali:material-summary";
 
 /**
  * Summaries are cached on the device, not in the database.

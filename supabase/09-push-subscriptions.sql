@@ -163,12 +163,18 @@ commit;
 -- Idempotent on rerun: the old job is unscheduled by name first, so applying
 -- this file twice does not leave two jobs racing to send every reminder twice.
 
+-- The delivery job was named jadoli-push before the app rename; unscheduling
+-- that name too keeps a database that already ran the old file from ending up
+-- with two jobs (which would send every reminder twice).
+select cron.unschedule('jadwali-push') where exists (
+  select 1 from cron.job where jobname = 'jadwali-push'
+);
 select cron.unschedule('jadoli-push') where exists (
   select 1 from cron.job where jobname = 'jadoli-push'
 );
 
 select cron.schedule(
-  'jadoli-push',
+  'jadwali-push',
   '* * * * *',
   $cron$
     select net.http_post(
@@ -194,8 +200,15 @@ as $$
   delete from public.push_deliveries where sent_at < now() - interval '14 days';
 $$;
 
+select cron.unschedule('jadwali-push-prune') where exists (
+  select 1 from cron.job where jobname = 'jadwali-push-prune'
+);
+select cron.unschedule('jadoli-push-prune') where exists (
+  select 1 from cron.job where jobname = 'jadoli-push-prune'
+);
+
 select cron.schedule(
-  'jadoli-push-prune',
+  'jadwali-push-prune',
   '17 4 * * *',
   $cron$ select public.prune_push_deliveries() $cron$
 );

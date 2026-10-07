@@ -28,7 +28,7 @@
  * chunks, and the old JavaScript, with no way to tell - the app loads, and it
  * is simply the app as it was before the fix.
  */
-const VERSION = "jadoli-v11";
+const VERSION = "jadwali-v11";
 /**
  * Every route the app can open, because a page that is not cached is not
  * merely missing - it is worse than missing. The worker falls back to the home
@@ -170,7 +170,7 @@ self.addEventListener("activate", (event) => {
  */
 self.addEventListener("message", (event) => {
   const data = event.data;
-  if (!data || data.type !== "jadoli:warm" || !Array.isArray(data.urls)) return;
+  if (!data || data.type !== "jadwali:warm" || !Array.isArray(data.urls)) return;
   const urls = data.urls.filter(
     (u) => typeof u === "string" && u.startsWith(self.location.origin),
   );
@@ -200,7 +200,7 @@ const PUSH_FALLBACK = "/events";
  * notification on a phone at 8am reads as an error, and a student who cannot
  * tell a reminder from a failure stops trusting the whole channel.
  */
-const pushTitle = (data) => (typeof data.title === "string" && data.title.trim()) || "Jadoli";
+const pushTitle = (data) => (typeof data.title === "string" && data.title.trim()) || "Jadwali";
 const pushBody = (data) =>
   typeof data.body === "string" && data.body.trim() ? data.body.trim() : "You have something due";
 
@@ -273,7 +273,7 @@ self.addEventListener("notificationclick", (event) => {
     self.clients
       .matchAll({ type: "window", includeUncontrolled: true })
       .then((list) => {
-        // An open Jadoli window anywhere is the one to reuse, whichever route it
+        // An open Jadwali window anywhere is the one to reuse, whichever route it
         // happens to be showing: the app navigates on the client, so posting a
         // message to it lands on the right screen without a reload.
         const open = list.find((c) => c.url && new URL(c.url).origin === self.location.origin);

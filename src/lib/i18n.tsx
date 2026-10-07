@@ -28,7 +28,7 @@ const I18nContext = createContext<I18nValue>({
   tr: (ar) => ar,
 });
 
-const LANG_KEY = "jadoli_lang";
+const LANG_KEY = "jadwali_lang";
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<Lang>("ar");

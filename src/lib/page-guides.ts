@@ -335,7 +335,7 @@ export const PAGE_GUIDES: PageGuide[] = [
 export const pageGuideFor = (pathname: string): PageGuide | undefined =>
   PAGE_GUIDES.find((g) => pathname === g.match);
 
-const NS = "jadoli_page_seen";
+const NS = "jadwali_page_seen";
 
 export const readPageSeen = (who: string, page: string): boolean => {
   try {

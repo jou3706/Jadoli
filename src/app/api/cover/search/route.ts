@@ -29,7 +29,7 @@ export async function GET(req: Request) {
 
   try {
     const res = await fetch(url, {
-      headers: { "User-Agent": "Jadoli/1.0 (student app)" },
+      headers: { "User-Agent": "Jadwali/1.0 (student app)" },
       signal: AbortSignal.timeout(20_000),
     });
     if (!res.ok) {

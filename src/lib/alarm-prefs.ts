@@ -20,7 +20,7 @@ export type AlarmPrefs = {
   wake: boolean;
 };
 
-const KEY = "jadoli:alarm-prefs";
+const KEY = "jadwali:alarm-prefs";
 
 const OFF: AlarmPrefs = { sound: false, notifications: false, wake: false };
 

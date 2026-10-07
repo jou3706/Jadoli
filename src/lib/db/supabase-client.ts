@@ -18,7 +18,7 @@ export function getSupabase(): SupabaseClient | null {
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,
-      storageKey: "jadoli_sb_session",
+      storageKey: "jadwali_sb_session",
     },
   });
   return client;

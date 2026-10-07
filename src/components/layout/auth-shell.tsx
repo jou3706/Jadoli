@@ -27,7 +27,7 @@ export function AuthShell({
       <aside className="hidden flex-col justify-between bg-primary p-10 text-primary-foreground lg:flex">
         <Link href="/" className="flex items-center gap-2 text-lg font-bold">
           <Icon className="h-6 w-6" />
-          <span className="font-display">{tr("جدولي", "Jadoli")}</span>
+          <span className="font-display">{tr("جدولي", "Jadwali")}</span>
         </Link>
 
         <div className="space-y-5">
@@ -51,7 +51,7 @@ export function AuthShell({
         </div>
 
         <p className="text-sm text-primary-foreground/70">
-          © {new Date().getFullYear()} Jadoli
+          © {new Date().getFullYear()} Jadwali
           <span className="mx-2">·</span>
           <Link href="/privacy" className="underline">
             {tr("سياسة الخصوصية", "Privacy policy")}
@@ -63,7 +63,7 @@ export function AuthShell({
         <div className="flex items-center justify-between p-4">
           <Link href="/" className="flex items-center gap-2 font-display font-bold lg:invisible">
             <Icon className="h-5 w-5 text-primary" />
-            {tr("جدولي", "Jadoli")}
+            {tr("جدولي", "Jadwali")}
           </Link>
           <div className="flex items-center gap-1">
             <LangToggle />

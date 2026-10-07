@@ -272,8 +272,8 @@ async function callProvider(
         def.provider === "groq" ? "api.groq.com/openai/v1" : "openrouter.ai/api/v1",
         def.provider === "openrouter"
           ? {
-              "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL ?? "https://jadoli.app",
-              "X-Title": "Jadoli",
+              "HTTP-Referer": process.env.NEXT_PUBLIC_SITE_URL ?? "https://jadwali.app",
+              "X-Title": "Jadwali",
             }
           : {},
         abort,

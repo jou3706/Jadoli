@@ -72,7 +72,7 @@ export function OnboardingGuide() {
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="font-heading text-xl">
-            {tr("أهلاً بيك في جادول", "Welcome to Jadoli")}
+            {tr("أهلاً بيك في جادول", "Welcome to Jadwali")}
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-3">

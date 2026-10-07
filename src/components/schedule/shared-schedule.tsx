@@ -148,7 +148,7 @@ export function SharedSchedule({ payload }: { payload: SharePayload }) {
       )}
 
       <p className="pb-6 text-center text-xs text-muted-foreground">
-        {now.getFullYear()} · Jadoli
+        {now.getFullYear()} · Jadwali
       </p>
     </div>
   );
