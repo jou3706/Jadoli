@@ -53,6 +53,12 @@ export const MAX_NOTE_CHARS = 12_000;
 /** Mirrors `MAX_CARDABLE_MATERIALS` in `lib/material-cards`. */
 export const MAX_MATERIAL_PARTS = 6;
 
+/** The student decides the card count; this is the most one request may ask for. */
+export const MIN_FLASHCARDS = 3;
+/** Mirrored by the review dialog's free number input, so a higher ceiling here
+ *  would tell the model something the screen will not let the student ask. */
+export const MAX_FLASHCARDS = 40;
+
 /**
  * Quiz generation: where the questions come from.
  *
@@ -179,7 +185,7 @@ export const flashcardsBodySchema = z
     /** Files already saved as materials on the course. */
     materials: z.array(materialRef).max(MAX_MATERIAL_PARTS).default([]),
     /** How many cards to ask for. A hint, not a promise. */
-    count: z.number().int().min(3).max(40).default(10),
+    count: z.number().int().min(MIN_FLASHCARDS).max(MAX_FLASHCARDS).default(10),
     language: z.enum(["ar", "en"]).default("ar"),
   })
   .refine((v) => v.text.trim().length > 0 || v.materials.length > 0, {

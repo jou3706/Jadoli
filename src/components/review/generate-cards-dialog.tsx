@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Field, Input, Select, Textarea } from "@/components/ui/input";
+import { Field, Input, Textarea } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { formatBytes, safeFileName } from "@/lib/db/storage";
 import { kindMeta } from "@/lib/materials";
@@ -32,7 +32,7 @@ import {
   isDuplicateCard,
   type GeneratedCard,
 } from "@/lib/flashcards";
-import { MAX_NOTE_CHARS } from "@/lib/ai/schema";
+import { MAX_FLASHCARDS, MAX_NOTE_CHARS, MIN_FLASHCARDS } from "@/lib/ai/schema";
 import type { Material } from "@/lib/db/types";
 
 /**
@@ -53,7 +53,6 @@ import type { Material } from "@/lib/db/types";
  * screen works the same whether the save is going to reach the server or sit on
  * the device until it can.
  */
-const COUNT_CHOICES = [5, 10, 15, 20];
 
 type Draft = GeneratedCard & { keep: boolean };
 
@@ -199,7 +198,9 @@ export function GenerateCardsDialog({
       const data = await post({
         subject: course,
         text: text.trim(),
-        count,
+        // The input is free, so the value is clamped here as well as in the
+        // schema: an out-of-range count would otherwise be a 400 with no card.
+        count: Math.min(MAX_FLASHCARDS, Math.max(MIN_FLASHCARDS, count)),
         language: lang,
         materials: kept.map((m) => ({ id: m.id, file_path: m.file_path, title: m.title })),
       });
@@ -362,14 +363,30 @@ export function GenerateCardsDialog({
                   ))}
                 </datalist>
               </Field>
-              <Field label={tr("عدد الكروت", "How many cards")}>
-                <Select value={String(count)} onChange={(e) => setCount(Number(e.target.value))}>
-                  {COUNT_CHOICES.map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </Select>
+              <Field
+                label={tr("عدد الكروت", "How many cards")}
+                hint={tr(
+                  `من ${MIN_FLASHCARDS} لـ ${MAX_FLASHCARDS}`,
+                  `${MIN_FLASHCARDS}–${MAX_FLASHCARDS}`,
+                )}
+              >
+                <Input
+                  type="number"
+                  min={MIN_FLASHCARDS}
+                  max={MAX_FLASHCARDS}
+                  step={1}
+                  inputMode="numeric"
+                  value={count}
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    if (!Number.isNaN(n)) setCount(Math.trunc(n));
+                  }}
+                  onBlur={() =>
+                    setCount((c) =>
+                      Math.min(MAX_FLASHCARDS, Math.max(MIN_FLASHCARDS, c)),
+                    )
+                  }
+                />
               </Field>
             </div>
 
