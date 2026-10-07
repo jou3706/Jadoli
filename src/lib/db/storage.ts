@@ -103,8 +103,13 @@ async function upload(
 }
 
 /** Uploads a file the user dropped and returns the path + public URL. */
-export function saveMaterialFile(file: File) {
-  return upload("files", file.name, file, file.type || "application/octet-stream");
+export async function saveMaterialFile(file: File) {
+  // Some Android WebViews hand the page a File backed by a content:// URI that
+  // no fetch can stream: the upload then dies with a bare "Failed to fetch"
+  // even though the network is fine and every other Supabase call works. Reading
+  // the file to a buffer first gives the upload a concrete body to send.
+  const body = await file.arrayBuffer();
+  return upload("files", file.name, body, file.type || "application/octet-stream");
 }
 
 /** Stores a generated cover so it survives without bloating `subjects`. */
