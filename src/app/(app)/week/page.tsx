@@ -31,7 +31,7 @@ export default function WeekPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-3" data-tour="week-header">
         <div className="min-w-0 flex-1">
           <h1 className="font-display text-[32px] font-bold text-foreground">
             {tr("الأسبوع كله", "Full week")}
@@ -46,7 +46,7 @@ export default function WeekPage() {
           </p>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2" data-tour="week-export">
           <Button variant="outline" onClick={() => setShareOpen(true)} disabled={isLoading}>
             <Share2 className="h-4 w-4" /> {tr("مشاركة", "Share")}
           </Button>

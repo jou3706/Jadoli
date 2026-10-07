@@ -125,7 +125,7 @@ export default function AttendancePage() {
 
   return (
     <div className="space-y-5">
-      <div>
+      <div data-tour="attendance-header">
         <h1 className="font-display text-2xl font-bold text-foreground sm:text-[32px]">
           {tr("تتبع الحضور", "Attendance")}
         </h1>
@@ -137,7 +137,7 @@ export default function AttendancePage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 sm:gap-4">
+      <div className="grid grid-cols-3 gap-2 sm:gap-4" data-tour="attendance-stats">
         <div className="rounded-xl border bg-primary/5 p-3 text-center sm:rounded-2xl sm:p-5">
           <ClipboardCheck className="mx-auto h-6 w-6 text-primary sm:h-7 sm:w-7" />
           <p className="mt-1 text-[10px] text-muted-foreground sm:mt-2 sm:text-sm">
@@ -171,7 +171,7 @@ export default function AttendancePage() {
       </div>
 
       {courses.length > 0 && (
-        <div className="space-y-2">
+        <div className="space-y-2" data-tour="attendance-risk">
           <div className="flex items-baseline justify-between gap-2">
             <h2 className="flex items-center gap-1.5 text-sm font-semibold">
               <ShieldAlert className="h-4 w-4 text-primary" />
@@ -239,7 +239,7 @@ export default function AttendancePage() {
         </div>
       )}
 
-      <div className="rounded-2xl border bg-card p-4">
+      <div className="rounded-2xl border bg-card p-4" data-tour="attendance-chart">
         <p className="flex items-center gap-1.5 text-sm font-semibold">
           <TrendingUp className="h-4 w-4 text-primary" />
           {tr("آخر 8 أسابيع", "Last 8 weeks")}

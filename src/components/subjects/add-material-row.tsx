@@ -117,7 +117,7 @@ export function AddMaterialRow({
   const Chevron = open ? ChevronUp : ChevronDown;
 
   return (
-    <div className="border-t">
+    <div className="border-t" data-tour="subject-add">
       {available.length > 0 ? (
         <>
           <button

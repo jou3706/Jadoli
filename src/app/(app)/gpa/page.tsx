@@ -287,7 +287,7 @@ export default function GpaPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-3" data-tour="gpa-header">
         <div className="min-w-0 flex-1">
           <h1 className="font-display text-2xl font-bold text-foreground sm:text-[32px]">
             {tr("حاسبة المعدل", "GPA Calculator")}
@@ -305,12 +305,13 @@ export default function GpaPage() {
             setOpen(true);
           }}
           className="shrink-0"
+          data-tour="gpa-add"
         >
           <Plus className="h-4 w-4" /> {tr("إضافة مادة", "Add course")}
         </Button>
       </div>
 
-      <div className="grid grid-cols-3 gap-2 sm:gap-4">
+      <div className="grid grid-cols-3 gap-2 sm:gap-4" data-tour="gpa-stats">
         <div className="rounded-xl border bg-primary/5 p-3 text-center sm:rounded-2xl sm:p-5">
           <GraduationCap className="mx-auto h-6 w-6 text-primary sm:h-7 sm:w-7" />
           <p className="mt-1 text-[10px] text-muted-foreground sm:mt-2 sm:text-sm">
@@ -363,7 +364,7 @@ export default function GpaPage() {
         </div>
       )}
 
-      <div className="space-y-2">
+      <div className="space-y-2" data-tour="gpa-list">
         {grades.length === 0 ? (
           <p className="rounded-xl border border-dashed bg-card p-8 text-center text-sm text-muted-foreground">
             {tr(

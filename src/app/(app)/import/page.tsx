@@ -197,7 +197,7 @@ export default function ImportPage() {
 
   return (
     <div className="space-y-5">
-      <div>
+      <div data-tour="import-header">
         <h1 className="font-display text-[32px] font-bold text-foreground">
           {tr("استيراد الجدول", "Import schedule")}
         </h1>
@@ -216,6 +216,7 @@ export default function ImportPage() {
           void addFiles(e.dataTransfer.files);
         }}
         className="rounded-2xl border-2 border-dashed bg-card p-6 text-center"
+        data-tour="import-drop"
       >
         <input
           ref={inputRef}
@@ -272,7 +273,7 @@ export default function ImportPage() {
             ))}
           </ul>
 
-          <Button onClick={() => void run()} disabled={busy} className="h-12 w-full text-base">
+          <Button onClick={() => void run()} disabled={busy} className="h-12 w-full text-base" data-tour="import-run">
             {busy ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />{" "}
@@ -295,7 +296,7 @@ export default function ImportPage() {
       )}
 
       {kept.length > 0 && (
-        <div className="space-y-3">
+        <div className="space-y-3" data-tour="import-review">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="font-display text-lg font-bold">
               {tr("راجع قبل الحفظ", "Review before saving")}
@@ -414,7 +415,7 @@ export default function ImportPage() {
             </div>
           )}
 
-          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end" data-tour="import-save">
             <Button
               variant="outline"
               onClick={() => setPreview(emptyPreview())}

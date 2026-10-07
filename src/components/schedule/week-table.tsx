@@ -126,7 +126,7 @@ export const WeekTable = forwardRef<
   const today = now.getDay();
 
   return (
-    <div className="overflow-x-auto rounded-2xl border bg-card scrollbar-thin">
+    <div className="overflow-x-auto rounded-2xl border bg-card scrollbar-thin" data-tour="week-grid">
       <table
         ref={ref}
         className="w-full min-w-[1100px] table-fixed border-collapse text-sm"

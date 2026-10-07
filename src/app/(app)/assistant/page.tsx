@@ -596,7 +596,7 @@ export default function AssistantPage() {
           role="group"
           aria-label={tr("وضع المساعد", "Assistant mode")}
         >
-          <div className="flex rounded-md border p-0.5">
+          <div className="flex rounded-md border p-0.5" data-tour="assistant-modes">
             {(
               [
                 { id: "general", Icon: LayoutList, ar: "عام", en: "General" },
@@ -639,6 +639,7 @@ export default function AssistantPage() {
             }}
             className="h-9 rounded-md border bg-background px-2 text-sm"
             aria-label={tr("اختار الموديل", "Choose model")}
+            data-tour="assistant-model"
           >
             {providerGroups.map((group) => (
               <optgroup key={group.id} label={group.label}>
@@ -752,6 +753,7 @@ export default function AssistantPage() {
       <div
         ref={scrollRef}
         className="flex-1 space-y-3 overflow-y-auto rounded-2xl border bg-card p-3"
+        data-tour="assistant-chat"
       >
         {turns.length === 0 && (
           <div className="grid h-full place-items-center p-6 text-center">
@@ -972,7 +974,7 @@ export default function AssistantPage() {
         </p>
       )}
 
-      <div className="flex items-end gap-2">
+      <div className="flex items-end gap-2" data-tour="assistant-input">
         <input
           ref={fileRef}
           type="file"

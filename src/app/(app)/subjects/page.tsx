@@ -186,7 +186,7 @@ function SubjectCard({
   }
 
   return (
-    <div className="flex flex-col overflow-hidden rounded-2xl border bg-card">
+    <div className="flex flex-col overflow-hidden rounded-2xl border bg-card" data-tour="subject-card">
       <div className="flex items-start gap-3 p-4">
         {/* The cover keeps its own pick/AI/remove buttons. */}
         <SubjectCoverTile
@@ -317,7 +317,7 @@ function SubjectCard({
       {/* the drop target: drag a file from the desktop onto this row */}
       <AddMaterialRow subjectKey={name} onAdd={addFile} onAddLink={addLink} />
 
-      <div className="flex items-center gap-1 border-t">
+      <div className="flex items-center gap-1 border-t" data-tour="subject-actions">
         <button
           type="button"
           onClick={() => setMaterialsOpen(true)}
@@ -424,7 +424,7 @@ export default function SubjectsPage() {
 
   return (
     <div className="space-y-5">
-      <div>
+      <div data-tour="subjects-header">
         <h1 className="font-display text-[32px] font-bold text-foreground">
           {tr("موادي", "My subjects")}
         </h1>
@@ -439,7 +439,7 @@ export default function SubjectsPage() {
       {isLoading && <Skeleton className="h-40" />}
 
       {!isLoading && names.length === 0 && (
-        <div className="rounded-2xl border border-dashed bg-card p-10 text-center text-muted-foreground">
+        <div className="rounded-2xl border border-dashed bg-card p-10 text-center text-muted-foreground" data-tour="subjects-empty">
           {tr("مفيش مواد الدراسية", "No subjects yet")}
         </div>
       )}

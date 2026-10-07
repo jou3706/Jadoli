@@ -107,7 +107,7 @@ export function ReviewScreen() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-3" data-tour="review-header">
         <div className="min-w-0 flex-1">
           <h1 className="font-display text-[32px] font-bold text-foreground">
             {tr("المراجعة", "Review")}
@@ -128,7 +128,7 @@ export function ReviewScreen() {
         <EmptyState onGenerate={() => setGenerateOpen(true)} />
       ) : (
         <>
-          <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <section className="grid grid-cols-2 gap-3 sm:grid-cols-4" data-tour="review-stats">
             <Stat label={tr("مستنية دلوقتي", "Due now")} value={stats.due} tone="due" />
             <Stat label={tr("جديدة", "New")} value={stats.fresh} />
             <Stat label={tr("لسه", "Learning")} value={stats.young} />
@@ -140,7 +140,7 @@ export function ReviewScreen() {
           </section>
 
           {queue.length > 0 && (
-            <section className="rounded-2xl border bg-card p-4">
+            <section className="rounded-2xl border bg-card p-4" data-tour="review-queue">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="min-w-0">
                   <h2 className="font-heading font-bold">
@@ -355,7 +355,7 @@ function SessionRow({
 function EmptyState({ onGenerate }: { onGenerate: () => void }) {
   const { tr } = useI18n();
   return (
-    <div className="rounded-2xl border border-dashed p-8 text-center">
+    <div className="rounded-2xl border border-dashed p-8 text-center" data-tour="review-empty">
       <BookOpen className="mx-auto h-8 w-8 text-muted-foreground" />
       <p className="mt-3 font-heading text-lg font-bold">
         {tr("لسه مفيش كروت", "No cards yet")}

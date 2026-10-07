@@ -153,6 +153,7 @@ export function Header({
             size="sm"
             onClick={() => setEditMode((p) => !p)}
             aria-pressed={editMode}
+            data-tour="edit-toggle"
             className="hidden h-9 gap-1.5 lg:inline-flex"
           >
             {editMode ? <Check className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}

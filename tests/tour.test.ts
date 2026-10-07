@@ -44,5 +44,5 @@ test("tours are watched per account, not per device", () => {
 
 test("unknown routes have no tour", () => {
   assert.equal(tourForPath("/login"), undefined);
-  assert.equal(tourForPath("/week"), undefined);
+  assert.equal(tourForPath("/widget"), undefined);
 });

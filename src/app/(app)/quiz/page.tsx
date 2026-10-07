@@ -88,9 +88,9 @@ export default function QuizPage() {
   }
   return (
     <div className="mx-auto max-w-2xl space-y-4 p-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between" data-tour="quiz-header">
         <h1 className="text-xl font-semibold">نظام الاختبارات والأسئلة التفاعلية</h1>
-        <Link href="/questions" className="text-sm text-primary underline">
+        <Link href="/questions" className="text-sm text-primary underline" data-tour="quiz-bank">
           بنك الأسئلة
         </Link>
       </div>

@@ -42,7 +42,7 @@ export function GpaWhatIf() {
   const delta = projected === null || !now.hours ? 0 : projected - now.gpa;
 
   return (
-    <div className="space-y-3 rounded-2xl border bg-card p-4">
+    <div className="space-y-3 rounded-2xl border bg-card p-4" data-tour="gpa-whatif">
       <p className="flex items-center gap-1.5 text-sm font-semibold">
         <Calculator className="h-4 w-4 text-primary" />
         {tr("لو جبت إيه هيعمل إيه في معدلك؟", "What would one more course do?")}

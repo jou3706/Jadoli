@@ -70,7 +70,7 @@ export function QuizBuilder({
       (source === "topic" && !!topic.trim()));
 
   return (
-    <div className="space-y-3 rounded-xl border p-4">
+    <div className="space-y-3 rounded-xl border p-4" data-tour="quiz-builder">
       <div className="grid gap-3 md:grid-cols-2">
         <div>
           <label className="text-xs">المادة / Subject</label>

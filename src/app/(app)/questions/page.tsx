@@ -46,7 +46,7 @@ export default function QuestionsPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2" data-tour="bank-header">
         <h1 className="text-xl font-semibold">{tr("بنك الأسئلة", "Question bank")}</h1>
         <span className="text-sm text-muted-foreground">
           {tr(`${questions.length} سؤال`, `${questions.length} questions`)}
@@ -58,6 +58,7 @@ export default function QuestionsPage() {
         value={needle}
         onChange={(e) => setNeedle(e.target.value)}
         placeholder={tr("ابحث في الأسئلة أو المواد…", "Search questions or courses…")}
+        data-tour="bank-search"
       />
 
       {isLoading && !questions.length && (
@@ -65,7 +66,7 @@ export default function QuestionsPage() {
       )}
 
       {!isLoading && questions.length === 0 && (
-        <div className="rounded-xl border p-6 text-center text-sm text-muted-foreground">
+        <div className="rounded-xl border p-6 text-center text-sm text-muted-foreground" data-tour="bank-empty">
           {tr(
             "لسه مفيش أسئلة محفوظة. اعمل امتحان من صفحة الاختبارات وهيتخزن هنا لوحده.",
             "No saved questions yet. Generate an exam from the Quiz page and it will be kept here.",
@@ -83,7 +84,7 @@ export default function QuestionsPage() {
             {items.map((item) => {
               const expanded = open === item.id;
               return (
-                <div key={item.id} className="rounded-xl border p-3">
+                <div key={item.id} className="rounded-xl border p-3" data-tour="bank-row">
                   <div className="flex items-start gap-2">
                     <button
                       type="button"

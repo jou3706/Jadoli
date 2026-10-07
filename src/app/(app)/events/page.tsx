@@ -194,7 +194,7 @@ export default function EventsPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-wrap items-end justify-between gap-3" data-tour="events-header">
         <div className="min-w-0 flex-1">
           <h1 className="font-display text-[32px] font-bold text-foreground">
             {tr("مناسبات الجامعة", "University events")}
@@ -211,12 +211,13 @@ export default function EventsPage() {
             setEditing(null);
             setOpen(true);
           }}
+          data-tour="events-add"
         >
           <Plus className="h-4 w-4" /> {tr("مناسبة جديدة", "New event")}
         </Button>
       </div>
 
-      <div className="flex gap-1 rounded-xl border bg-card p-1">
+      <div className="flex gap-1 rounded-xl border bg-card p-1" data-tour="events-tabs">
         {(["upcoming", "past"] as const).map((k) => (
           <button
             key={k}
@@ -235,11 +236,11 @@ export default function EventsPage() {
       </div>
 
       {shown.length === 0 ? (
-        <p className="rounded-xl border border-dashed bg-card p-10 text-center text-muted-foreground">
+        <p className="rounded-xl border border-dashed bg-card p-10 text-center text-muted-foreground" data-tour="events-empty">
           {tr("مفيش مناسبات", "No events")}
         </p>
       ) : (
-        <ul className="space-y-2">
+        <ul className="space-y-2" data-tour="events-list">
           {shown.map((e) => {
             const tone = EVENT_TYPES.find((t) => t.k === e.type) ?? EVENT_TYPES[3];
             const d = new Date(`${e.date}T00:00:00`);
