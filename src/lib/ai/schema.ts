@@ -59,6 +59,11 @@ export const MIN_FLASHCARDS = 3;
  *  would tell the model something the screen will not let the student ask. */
 export const MAX_FLASHCARDS = 40;
 
+/** The student picks the exam size; the ceiling is the checker's own cap, so a
+ *  bigger number here would produce exams the checker then refuses to mark. */
+export const MIN_QUIZ_QUESTIONS = 3;
+export const MAX_QUIZ_QUESTIONS = 30;
+
 /**
  * Quiz generation: where the questions come from.
  *
@@ -73,7 +78,7 @@ export const quizSourceSchema = z
     materialIds: z.array(z.string().min(1).max(64)).max(MAX_MATERIAL_PARTS).default([]),
     chapter: z.string().trim().min(1).optional(),
     topic: z.string().trim().min(1).optional(),
-    count: z.number().int().min(3).max(20).default(10),
+    count: z.number().int().min(MIN_QUIZ_QUESTIONS).max(MAX_QUIZ_QUESTIONS).default(10),
     language: z.enum(["auto", "ar", "en"]).default("auto"),
   })
   .superRefine((v, ctx) => {

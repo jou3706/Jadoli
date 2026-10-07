@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { Material } from "@/lib/db/types";
-import type { QuizSource } from "@/lib/ai/schema";
+import { MAX_QUIZ_QUESTIONS, MIN_QUIZ_QUESTIONS, type QuizSource } from "@/lib/ai/schema";
 
 /**
  * Choosing what an exam is made from.
@@ -94,11 +94,18 @@ export function QuizBuilder({
           <label className="text-xs">عدد الأسئلة / Count</label>
           <input
             type="number"
-            min={3}
-            max={20}
+            min={MIN_QUIZ_QUESTIONS}
+            max={MAX_QUIZ_QUESTIONS}
             className="w-full rounded-md border px-2 py-1"
             value={count}
-            onChange={(e) => setCount(Math.min(20, Math.max(3, Number(e.target.value) || 3)))}
+            onChange={(e) =>
+              setCount(
+                Math.min(
+                  MAX_QUIZ_QUESTIONS,
+                  Math.max(MIN_QUIZ_QUESTIONS, Number(e.target.value) || MIN_QUIZ_QUESTIONS),
+                ),
+              )
+            }
           />
         </div>
         <div>

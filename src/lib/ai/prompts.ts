@@ -1,5 +1,7 @@
 import "server-only";
 
+import { MAX_QUIZ_QUESTIONS, MIN_QUIZ_QUESTIONS } from "@/lib/ai/schema";
+
 /** Shared rules for both modes. */
 const BASE = `You are "Jadoli", a study assistant for university students in Egypt.
 You answer in the SAME language the student writes in (Arabic or English).
@@ -208,7 +210,8 @@ Return ONLY this JSON, with no prose and no markdown fence:
 - Every question has an "explanation" written as the reason the answer is right.
 - Mix the types. Never repeat a question.
 ${languageRule}
-- Return between 3 and 20 questions.`;
+- Return between ${MIN_QUIZ_QUESTIONS} and ${MAX_QUIZ_QUESTIONS} questions, but obey the
+  exact count you were asked for.`;
 }
 
 /**
@@ -375,7 +378,7 @@ the app.
 \`\`\`
 
 - subjectKey must be the exact course name from the injected course list.
-- count: how many questions to make, default 10, between 3 and 20.
+- count: how many questions to make, default 10, between 3 and 30.
 - language: leave it as "auto"; the exam matches the language of the material or
   the chapter/topic title.
 - The app then shows the student every material in that course, and they choose
