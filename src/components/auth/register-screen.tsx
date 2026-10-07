@@ -18,6 +18,7 @@ export function RegisterScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -38,6 +39,15 @@ export function RegisterScreen() {
           }
           if (password !== confirm) {
             setError(tr("الباسوردين مش متطابقين", "Passwords do not match"));
+            return;
+          }
+          if (!agreed) {
+            setError(
+              tr(
+                "لازم توافق على سياسة الخصوصية الأول",
+                "You need to accept the Privacy Policy first",
+              ),
+            );
             return;
           }
           setBusy(true);
@@ -100,6 +110,22 @@ export function RegisterScreen() {
         </Field>
 
         {error && <p className="text-sm text-destructive">{error}</p>}
+
+        <label className="flex items-start gap-2 text-sm text-muted-foreground">
+          <input
+            type="checkbox"
+            required
+            checked={agreed}
+            onChange={(e) => setAgreed(e.target.checked)}
+            className="mt-0.5 h-4 w-4 accent-primary"
+          />
+          <span>
+            {tr("أوافق، قرأت ", "I have read and agree to the ")}
+            <Link href="/privacy" className="font-semibold text-primary underline">
+              {tr("سياسة الخصوصية", "Privacy Policy")}
+            </Link>
+          </span>
+        </label>
 
         <Button type="submit" className="h-12 w-full text-base" disabled={busy}>
           {tr("اعمل حساب", "Create account")}
