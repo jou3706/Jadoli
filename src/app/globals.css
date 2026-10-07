@@ -193,6 +193,9 @@ body {
   border-radius: var(--radius-lg);
   max-width: min(88vw, 360px);
 }
+.introjs-tooltip-header {
+  padding-right: 52px;
+}
 .introjs-tooltip-title,
 .introjs-tooltiptext {
   font-family: var(--font-body);
@@ -200,6 +203,24 @@ body {
 .introjs-tooltip-title {
   font-family: var(--font-heading);
   line-height: 1.5;
+  width: auto !important;
+}
+.introjs-skipbutton {
+  top: 10px;
+  right: 10px;
+  width: auto;
+  min-width: 38px;
+  height: auto;
+  line-height: 1;
+  padding: 7px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  color: hsl(var(--muted-foreground));
+}
+.introjs-skipbutton:hover {
+  background: hsl(var(--muted));
+  color: hsl(var(--foreground));
 }
 .introjs-button {
   font-family: var(--font-body);
