@@ -56,18 +56,33 @@ export function AddMaterialRow({
   const [busy, setBusy] = useState(false);
   const files = canStoreFiles();
 
+  /** Which error messages are worth translating for the uploader. */
+  function uploadError(e: Error): string {
+    const msg = e.message ?? "";
+    if (msg === "NO_SUPABASE" || msg === "NO_SESSION")
+      return tr(
+        "الرفع محتاج الدخول بحساب، أو الصق لينك بدل الملف.",
+        "Uploading needs a signed-in account — paste a link instead.",
+      );
+    return msg;
+  }
+
+  function needSupabase() {
+    toast({
+      title: tr("الرفع محتاج Supabase", "Uploading needs Supabase"),
+      description: tr(
+        "ارفع الملف من Supabase، أو الصق لينك بدل الملف.",
+        "Upload the file to Supabase, or paste a link instead.",
+      ),
+      variant: "destructive",
+    });
+  }
+
   async function take(list: FileList | File[]) {
     const file = list[0];
     if (!file) return;
     if (!files) {
-      toast({
-        title: tr("الرفع محتاج Supabase", "Uploading needs Supabase"),
-        description: tr(
-          "ارفع الملف من Supabase، أو الصق لينك بدل الملف.",
-          "Upload the file to Supabase, or paste a link instead.",
-        ),
-        variant: "destructive",
-      });
+      needSupabase();
       return;
     }
     if (file.size > MAX_FILE_BYTES) {
@@ -91,7 +106,7 @@ export function AddMaterialRow({
     } catch (e) {
       toast({
         title: tr("فشل الرفع", "Upload failed"),
-        description: e instanceof Error ? e.message : undefined,
+        description: uploadError(e instanceof Error ? e : new Error(String(e))),
         variant: "destructive",
       });
     } finally {
@@ -172,11 +187,13 @@ export function AddMaterialRow({
         aria-label={`${tr("إضافة مادة جديدة", "Add a new material")} — ${subjectKey}`}
         onClick={() => {
           if (files) inputRef.current?.click();
+          else needSupabase();
         }}
         onKeyDown={(e) => {
           if (e.key === "Enter" || e.key === " ") {
             e.preventDefault();
             if (files) inputRef.current?.click();
+            else needSupabase();
           }
         }}
         onDragOver={(e) => {

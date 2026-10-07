@@ -132,22 +132,29 @@ function SubjectCard({
 
   function addLink(url: string) {
     ensureRow();
-    const title = decodeURIComponent(url.split("/").pop()?.split("?")[0] || url);
+    let title = "";
+    try {
+      title = decodeURIComponent(url.split("/").pop()?.split("?")[0] || url);
+    } catch {
+      // A malformed % in the pasted link throws, and that must not kill the add.
+      title = url;
+    }
     void createMaterial({
-      title: title.slice(0, 80),
+      title: (title || url).slice(0, 80),
       subject_key: name,
       url,
       type: detectKind(url),
       file_path: "",
       size: 0,
-    }).catch((e: Error) =>
-      toast({
-        title: tr("فشل حفظ المادة", "Could not save"),
-        description: e.message,
-        variant: "destructive",
-      }),
-    );
-    toast({ title: tr("اتضافت المادة", "Material added") });
+    })
+      .then(() => toast({ title: tr("اتضافت المادة", "Material added") }))
+      .catch((e: Error) =>
+        toast({
+          title: tr("فشل حفظ المادة", "Could not save"),
+          description: e.message,
+          variant: "destructive",
+        }),
+      );
   }
 
   /**
