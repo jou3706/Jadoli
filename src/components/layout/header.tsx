@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Bell, BellRing, Check, CloudOff, CloudUpload, LogOut, Pencil, Search, X } from "lucide-react";
+import { Bell, BellRing, Check, CloudOff, CloudUpload, HelpCircle, LogOut, Pencil, Search, X } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/db/auth";
 import { useList, useOffline } from "@/lib/db/store";
@@ -10,6 +10,7 @@ import { useNotifications } from "@/hooks/use-notifications";
 import { AlarmSoundToggle } from "@/components/subjects/event-alarm";
 import { ScreenWakeToggle } from "./screen-wake-toggle";
 import { PushToggle } from "./push-toggle";
+import { PAGE_GUIDE_EVENT } from "./page-guide";
 import { useScheduleContext } from "@/lib/schedule-context";
 import { nowCairo } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -158,6 +159,18 @@ export function Header({
           </Button>
 
           <OfflineBadge />
+
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label={tr("دليل الصفحة", "Page guide")}
+            title={tr("دليل الصفحة", "Page guide")}
+            onClick={() =>
+              window.dispatchEvent(new CustomEvent(PAGE_GUIDE_EVENT))
+            }
+          >
+            <HelpCircle className="h-4 w-4" />
+          </Button>
 
           <div className="relative hidden sm:block">
             <Search className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

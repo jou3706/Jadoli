@@ -10,6 +10,7 @@ import { Header } from "./header";
 import { MobileNav, MobileSearch, EditToggleButton } from "./mobile-nav";
 import { ThemeToggle, } from "./theme-toggle";
 import { LangToggle } from "./lang-toggle";
+import { PageGuide } from "./page-guide";
 import { Button } from "@/components/ui/button";
 
 function Spinner() {
@@ -66,6 +67,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               </Button>
             </div>
           </div>
+          <PageGuide />
           {children}
         </main>
       </div>
