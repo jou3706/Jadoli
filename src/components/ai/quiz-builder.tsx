@@ -96,6 +96,8 @@ export function QuizBuilder({
             type="number"
             min={MIN_QUIZ_QUESTIONS}
             max={MAX_QUIZ_QUESTIONS}
+            step={1}
+            inputMode="numeric"
             className="w-full rounded-md border px-2 py-1"
             value={count}
             onChange={(e) =>
@@ -107,6 +109,10 @@ export function QuizBuilder({
               )
             }
           />
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            من {MIN_QUIZ_QUESTIONS} لـ {MAX_QUIZ_QUESTIONS} / {MIN_QUIZ_QUESTIONS} to{" "}
+            {MAX_QUIZ_QUESTIONS}
+          </p>
         </div>
         <div>
           <label className="text-xs">اللغة / Language</label>

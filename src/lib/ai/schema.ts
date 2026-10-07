@@ -59,10 +59,11 @@ export const MIN_FLASHCARDS = 3;
  *  would tell the model something the screen will not let the student ask. */
 export const MAX_FLASHCARDS = 40;
 
-/** The student picks the exam size; the ceiling is the checker's own cap, so a
- *  bigger number here would produce exams the checker then refuses to mark. */
+/** The student picks the exam size; the request schema and the checker share
+ *  this one ceiling, so a lower number in one of them would silently refuse
+ *  what the other advertises. */
 export const MIN_QUIZ_QUESTIONS = 3;
-export const MAX_QUIZ_QUESTIONS = 30;
+export const MAX_QUIZ_QUESTIONS = 100;
 
 /**
  * Quiz generation: where the questions come from.
@@ -112,7 +113,7 @@ export const quizQuestionSchema = z.object({
 
 export const quizSetSchema = z.object({
   title: z.string().optional(),
-  questions: z.array(quizQuestionSchema).min(1).max(30),
+  questions: z.array(quizQuestionSchema).min(1).max(MAX_QUIZ_QUESTIONS),
 });
 
 export type QuizQuestion = z.infer<typeof quizQuestionSchema>;

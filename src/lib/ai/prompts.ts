@@ -211,7 +211,9 @@ Return ONLY this JSON, with no prose and no markdown fence:
 - Mix the types. Never repeat a question.
 ${languageRule}
 - Return between ${MIN_QUIZ_QUESTIONS} and ${MAX_QUIZ_QUESTIONS} questions, but obey the
-  exact count you were asked for.`;
+  exact count you were asked for. If you cannot finish that many in one response,
+  return fewer rather than broken JSON — a complete exam of ten beats a
+  half-written one of thirty. Keep every answer and explanation short.`;
 }
 
 /**
@@ -378,7 +380,7 @@ the app.
 \`\`\`
 
 - subjectKey must be the exact course name from the injected course list.
-- count: how many questions to make, default 10, between 3 and 30.
+- count: how many questions to make, default 10, between ${MIN_QUIZ_QUESTIONS} and ${MAX_QUIZ_QUESTIONS}.
 - language: leave it as "auto"; the exam matches the language of the material or
   the chapter/topic title.
 - The app then shows the student every material in that course, and they choose
