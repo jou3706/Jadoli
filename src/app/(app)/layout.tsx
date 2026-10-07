@@ -3,6 +3,7 @@
 import { ScheduleProvider } from "@/lib/schedule-context";
 import { AppShell } from "@/components/layout/app-shell";
 import { EventAlarms } from "@/components/subjects/event-alarm";
+import { OnboardingGuide } from "@/components/layout/onboarding-guide";
 
 export default function AppLayout({
   children,
@@ -21,6 +22,7 @@ export default function AppLayout({
         be refused.
       */}
       <EventAlarms />
+      <OnboardingGuide />
       <AppShell>{children}</AppShell>
     </ScheduleProvider>
   );
