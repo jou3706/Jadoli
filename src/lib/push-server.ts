@@ -286,6 +286,16 @@ export type DeliverySummary = {
   failed: number;
   removed: number;
   reminders: number;
+  /**
+   * Why the last send failed, if one did.
+   *
+   * A delivery that fails silently is the thing this whole arrangement was
+   * built to end, so the reason is reported rather than swallowed. It is
+   * stripped of anything that identifies the subscription: the address of a
+   * push endpoint is a credential in itself, and a screenshot of it is a
+   * screenshot of somebody else's phone.
+   */
+  lastError?: string;
 };
 
 /** The heartbeat of the delivery job, as it is stored. */
@@ -320,6 +330,23 @@ export async function tickStatus(sb: PushClient): Promise<{ table: boolean; last
   const row = (data ?? [])[0];
   return { table: true, last: (row as TickRow | undefined) ?? null };
 }/**
+ * What the push service said, without anything that identifies the student.
+ *
+ * The address of a push endpoint carries a token that lets anyone who has it
+ * send to that phone, so it is removed from every message. What is left is
+ * the status code and the reason, which is what a person can act on.
+ */
+function safeError(e: unknown): string {
+  const raw = (e as { message?: string; statusCode?: number })?.message ?? "unknown error";
+  const status = (e as { statusCode?: number })?.statusCode;
+  const stripped = raw
+    .replace(/https?:\/\/\S+/g, "<endpoint>")
+    .replace(/[A-Za-z0-9_-]{40,}/g, "<token>")
+    .slice(0, 200);
+  return status ? `${status}: ${stripped}` : stripped;
+}
+
+/**
  * The delivery job's own configuration, read the way the database holds it.
  *
  * Returns the names that are set and the address of the deployed app, and
@@ -454,6 +481,7 @@ export async function deliverTo(
         // alone: this reminder simply goes out on a later tick, and the ledger
         // still says it has not been sent.
         summary.failed += 1;
+        summary.lastError = safeError(e);
       }
     }
 
