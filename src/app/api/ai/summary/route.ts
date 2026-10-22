@@ -3,7 +3,7 @@ import { z } from "zod";
 import { completeJson } from "@/lib/ai/providers";
 import { extractJson } from "@/lib/ai/extract";
 import { buildSummaryPrompt } from "@/lib/ai/prompts";
-import { loadMaterials, skipReason } from "@/lib/ai/material-fetch";
+import { loadMaterials, skipReason, VIDEO_INSTRUCTION } from "@/lib/ai/material-fetch";
 import { summarySchema, tidySummary } from "@/lib/ai/summary";
 import { taskModel } from "@/lib/ai/routing";
 import { guardAiRequest } from "@/lib/ai/rate-limit";
@@ -48,7 +48,8 @@ export async function POST(req: Request) {
 
   const loaded = await loadMaterials(req, [{ id: materialId, title: "" }], ac.signal);
   const file = loaded.materials[0];
-  if (!file) {
+  const video = loaded.videos[0];
+  if (!file && !video) {
     const s = loaded.skipped[0];
     return NextResponse.json(
       {
@@ -64,10 +65,15 @@ export async function POST(req: Request) {
     const out = await completeJson(
       taskModel("import", true),
       buildSummaryPrompt(language),
-      `Read the attached material: ${file.title || "material"}.`,
-      [{ dataUrl: file.dataUrl, mime: file.mime }],
-      ac.signal,
-      true,
+      video
+        ? [`Watch the attached video: ${video.title}.`, VIDEO_INSTRUCTION].join("\n")
+        : `Read the attached material: ${file?.title || "material"}.`,
+      {
+        images: file ? [{ dataUrl: file.dataUrl, mime: file.mime }] : undefined,
+        videos: video ? [{ uri: video.uri }] : undefined,
+        signal: ac.signal,
+        json: true,
+      },
     );
 
     const result = summarySchema.safeParse(extractJson(out));

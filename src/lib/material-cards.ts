@@ -17,6 +17,7 @@
  */
 
 import { detectKind, safeUrl, type MaterialKindId } from "./materials";
+import { VIDEO_MIME, isYouTubeVideo } from "./ai/video";
 
 /** The bits of a `Material` this module needs. */
 export type MaterialRef = {
@@ -34,7 +35,7 @@ export type CardableReason =
   | "ready"
   /** A saved link, not an uploaded file. */
   | "link"
-  /** A video. There is no transcript here to ask questions about. */
+  /** A video that is not one a model can open. */
   | "video"
   /** PowerPoint/Keynote. The bytes are a zip, not text. */
   | "slides"
@@ -51,7 +52,9 @@ export type Cardable<T extends MaterialRef = MaterialRef> = {
   material: T;
   kind: MaterialKindId;
   reason: CardableReason;
-  /** `application/pdf` or `image/*`, when the material is readable. */
+  /**
+   * `application/pdf`, `image/*` or `video/mp4`, when the material is readable.
+   */
   mime: string;
   ok: boolean;
 };
@@ -118,7 +121,17 @@ export function cardableMaterial<T extends MaterialRef>(material: T): Cardable<T
     // A link is the common case, and the distinction that matters is *why* it
     // cannot be read: a video and a web page fail for different reasons and the
     // student can act on only one of them.
-    if (kind === "video") return blocked("video");
+    //
+    // A YouTube recording is the exception. Gemini takes a video by its
+    // address and watches it, so a saved lecture recording is as readable as a
+    // saved PDF - and it is the recording a student is most likely to have
+    // saved instead of the slides.
+    if (kind === "video") {
+      if (isYouTubeVideo(material.url)) {
+        return { material, kind, reason: "ready", mime: VIDEO_MIME, ok: true };
+      }
+      return blocked("video");
+    }
     if (kind === "slides") return blocked("slides");
     if (kind === "doc") return blocked("doc");
     if (!safeUrl(material.url)) return blocked("bad-url");
@@ -178,8 +191,8 @@ export function blockedLabel(
       "a link — download it and upload the file to make cards",
     ],
     video: [
-      "فيديو — مفيش نص محفوظ منه",
-      "a video — there is no saved transcript of it",
+      "فيديو — مش على يوتيوب، مش مدعوم",
+      "a video — not on YouTube, so not supported",
     ],
     slides: [
       "عرض تقديمي — مش مدعوم،صدّره PDF",

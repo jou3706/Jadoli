@@ -4,6 +4,7 @@ import {
   forgetSubscription,
   isGoneStatus,
   markDelivered,
+  recordTick,
   remindersFor,
   secretMatches,
   serviceClient,
@@ -131,6 +132,18 @@ sentKeys.push(reminder.key);
         summary.failed += 1;
       }
     }
+  }
+
+  // The heartbeat, written whether or not anything was sent.
+  //
+  // This run is the proof that the job is alive: a minute of silence in this
+  // table means the job stopped, and a job that has stopped delivers nothing
+  // without saying so. The failure is not allowed to hide the run, so the tick
+  // is written even when a delivery went wrong.
+  try {
+    await recordTick(sb, summary);
+  } catch {
+    /* a heartbeat that cannot be written must not cost the reminders */
   }
 
   return NextResponse.json(summary);

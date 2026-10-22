@@ -3,6 +3,7 @@ import { chatBodySchema } from "@/lib/ai/schema";
 import { streamChat } from "@/lib/ai/providers";
 import { ASSISTANT_SYSTEM, MATERIALS_SYSTEM, QUIZ_CHAT_SYSTEM } from "@/lib/ai/prompts";
 import { describePools, hasKeys, totalKeys } from "@/lib/ai/keys";
+import { VIDEO_INSTRUCTION } from "@/lib/ai/video";
 import type { ModelId } from "@/lib/ai/models";
 import { guardAiRequest } from "@/lib/ai/rate-limit";
 
@@ -38,7 +39,7 @@ export async function POST(req: Request) {
   const refused = await guardAiRequest(req, body);
   if (refused) return refused;
 
-  const { model, question, mode, history, images } = parsed.data;
+  const { model, question, mode, history, images, videos } = parsed.data;
   const ac = new AbortController();
   req.signal.addEventListener("abort", () => ac.abort(), { once: true });
 
@@ -50,6 +51,11 @@ export async function POST(req: Request) {
       : mode === "materials"
         ? MATERIALS_SYSTEM
         : ASSISTANT_SYSTEM;
+
+  // A video the student pasted is watched, not read: the model is told what it
+  // is looking at, because a model asked about a recording without being told
+  // will describe the video rather than what was said in it.
+  const ask = videos.length ? `${question}\n\n${VIDEO_INSTRUCTION}` : question;
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -65,8 +71,9 @@ export async function POST(req: Request) {
           model: model as ModelId,
           system,
           history: history.map((h) => ({ role: h.role, text: h.text })),
-          question,
+          question: ask,
           images: images.map((i) => ({ dataUrl: i.dataUrl, mime: i.mime })),
+          videos: videos.map((v) => ({ uri: v.uri, mime: v.mime })),
           signal: ac.signal,
           onToken: (delta) => send({ token: delta }),
         });

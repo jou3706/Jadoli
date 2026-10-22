@@ -28,10 +28,11 @@ import "server-only";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 // From ./bucket, never from ./db/storage: that module is "use client", and a
-// value imported from it here arrives as a client-reference proxy rather than the
-// bucket name, so the download asks for a bucket that does not exist.
+// value imported from it here arrives as a client-reference proxy rather than
+// the bucket name, so the download asks for a bucket that does not exist.
 import { BUCKET } from "@/lib/db/bucket";
 import { isOwnPath, mimeForName } from "./material-path";
+import { youtubeFileUri } from "./video";
 
 /** The one table this module reads. Named here rather than imported from the
  * client writer, because that module is browser-side by design. */
@@ -41,7 +42,7 @@ const MATERIALS_TABLE = "materials";
 type Sb = SupabaseClient;
 
 /** The two columns read out of a material row. */
-type Row = { file_path: string | null; title: string | null };
+type Row = { file_path: string | null; title: string | null; url: string | null };
 
 /**
  * Read past this and Gemini starts answering about the first pages only, which
@@ -61,8 +62,21 @@ export type LoadedMaterial = {
   mime: string;
 };
 
+/**
+ * A video the model is asked to watch.
+ *
+ * Named by its address rather than carried as bytes: the model fetches the
+ * recording itself, so a two-hour lecture costs no more to send than a link.
+ */
+export type LoadedVideo = {
+  title: string;
+  uri: string;
+};
+
 export type Loaded = {
   materials: LoadedMaterial[];
+  /** Videos among the materials asked for. */
+  videos: LoadedVideo[];
   /** Materials that were asked for but could not be read, with the reason. */
   skipped: { id: string; title: string; reason: string }[];
 };
@@ -98,27 +112,37 @@ async function currentUserId(sb: Sb, token: string) {
 }
 
 /**
- * Confirms the material belongs to the caller, and returns the path as stored.
+ * Confirms the material belongs to the caller, and returns it as stored.
  *
- * The client's own `file_path` is treated as a hint. The row is the answer, so a
- * material id cannot be paired with someone else's path to make the fetch below
- * read it.
+ * The client's own `file_path` is treated as a hint. The row is the answer, so
+ * a material id cannot be paired with someone else's path to make the fetch
+ * below read it.
+ *
+ * A row with no stored file is a link the student saved, and it is still the
+ * caller's own row: the client below is bound to the caller's token, so RLS
+ * has already decided which rows are visible. What a link cannot be is a path
+ * to fetch, and that is checked where it is used.
  */
-async function ownedPath(
+async function ownedMaterial(
   sb: Sb,
   id: string,
   userId: string,
-): Promise<{ path: string; title: string } | null> {
+): Promise<{ path: string; title: string; url: string } | null> {
   const { data, error } = await sb
     .from(MATERIALS_TABLE)
-    .select("file_path,title")
+    .select("file_path,title,url")
     .eq("id", id)
     .maybeSingle();
   if (error || !data) return null;
   const row = data as Row;
   const path = String(row.file_path ?? "").trim();
-  if (!path || !isOwnPath(path, userId)) return null;
-  return { path, title: String(row.title ?? "") };
+  // A stored file has to be the caller's own; a link has no path to check.
+  if (path && !isOwnPath(path, userId)) return null;
+  return {
+    path,
+    title: String(row.title ?? ""),
+    url: String(row.url ?? "").trim(),
+  };
 }
 
 /**
@@ -132,7 +156,7 @@ async function ownedPath(
  * policies the upload went through, so it succeeds for the owner either way and
  * reports a real status when the object genuinely is not there.
  *
- * The path has already been proven to be the caller's by `ownedPath`.
+ * The path has already been proven to be the caller's by `ownedMaterial`.
  */
 async function toDataUrl(
   sb: Sb,
@@ -201,6 +225,7 @@ export async function loadMaterials(
   signal: AbortSignal,
 ): Promise<Loaded> {
   const materials: LoadedMaterial[] = [];
+  const videos: LoadedVideo[] = [];
   const skipped: Loaded["skipped"] = [];
 
   let sb: Sb;
@@ -212,6 +237,7 @@ export async function loadMaterials(
     const err = (e as Error).message;
     return {
       materials: [],
+      videos: [],
       skipped: refs.map((r) => ({
         id: r.id,
         title: r.title,
@@ -221,11 +247,24 @@ export async function loadMaterials(
   }
 
   for (const ref of refs) {
-    const owned = await ownedPath(sb, ref.id, userId);
+    const owned = await ownedMaterial(sb, ref.id, userId);
     if (!owned) {
       skipped.push({ id: ref.id, title: ref.title, reason: "NOT_YOURS" });
       continue;
     }
+
+    // A saved link, not an upload. A recording of a lecture is the one link
+    // that can still be read, because the model fetches the video itself.
+    if (!owned.path) {
+      const uri = youtubeFileUri(owned.url);
+      if (uri) {
+        videos.push({ title: owned.title || "video", uri });
+        continue;
+      }
+      skipped.push({ id: ref.id, title: owned.title, reason: "LINK" });
+      continue;
+    }
+
     const mime = mimeForName(owned.path) || mimeForName(owned.title);
     if (!mime) {
       skipped.push({ id: ref.id, title: owned.title, reason: "UNSUPPORTED_TYPE" });
@@ -241,8 +280,37 @@ export async function loadMaterials(
     materials.push({ title: owned.title, dataUrl: out.dataUrl, mime });
   }
 
-  return { materials, skipped };
+  return { materials, videos, skipped };
 }
+
+/**
+ * What the model is being handed, named.
+ *
+ * The naming is the point: a model told "the attached file" when it has three
+ * of them will answer about the first, and a student reading three sets of
+ * cards has no way to tell which is which.
+ */
+export function attachmentLines(
+  materials: LoadedMaterial[],
+  videos: LoadedVideo[],
+): string[] {
+  const lines: string[] = [];
+  materials.forEach((m, i) => {
+    lines.push(`file ${i + 1}: ${m.title.trim() || `material ${i + 1}`}`);
+  });
+  videos.forEach((v, i) => {
+    lines.push(`video ${i + 1}: ${v.title.trim() || `video ${i + 1}`}`);
+  });
+  return lines;
+}
+
+/**
+ * How to read a video, said to the model once.
+ *
+ * Without it a model asked about a recording will describe the video rather
+ * than what was said in it, and will happily write cards about a title card.
+ */
+export { VIDEO_INSTRUCTION } from "./video";
 
 /** A reason in the app's two languages, for the dialog to show. */
 export function skipReason(reason: string, lang: "ar" | "en"): string {
@@ -257,6 +325,10 @@ export function skipReason(reason: string, lang: "ar" | "en"): string {
     TIMEOUT: ["القراءة اتأخرت", "that file took too long to read"],
     NO_BODY: ["مفيش محتوى في الملف", "that file came back empty"],
     READ_FAILED: ["مش قادرين نقرأ الملف", "could not read that file"],
+    LINK: [
+      "لينك — نزّله كملف وارفعه عشان نعمل منه كروت",
+      "a link — download it and upload the file to make cards",
+    ],
   };
   const found = table[reason] ?? table.READ_FAILED;
   return lang === "en" ? found[1] : found[0];

@@ -498,8 +498,8 @@ export function GenerateCardsDialog({
               <p className="flex items-start gap-2 text-xs text-muted-foreground">
                 <FileText className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                 {tr(
-                  "Materials links والفيديوهات مش قابلة للقراءة. نزّل الملف وارفعه على المادة، أو الصق ملخصًا فوق.",
-                  "Links and videos cannot be read. Download the file and upload it to the course, or paste a summary above.",
+                  "اللينكات والفيديوهات (غير يوتيوب) مش قابلة للقراءة. نزّل الملف وارفعه على المادة، أو الصق ملخصًا فوق.",
+                  "Links and videos (other than YouTube) cannot be read. Download the file and upload it to the course, or paste a summary above.",
                 )}
               </p>
             )}

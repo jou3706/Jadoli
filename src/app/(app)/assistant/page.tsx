@@ -36,6 +36,7 @@ import { QuizBuilder } from "@/components/ai/quiz-builder";
 import { MessageActions, MessageEditor } from "@/components/ai/message-actions";
 import { QuizSession } from "@/components/review/quiz-session";
 import { MODELS, PROVIDER_ORDER, findModel, type ModelDef } from "@/lib/ai/models";
+import { findYouTubeLinks } from "@/lib/ai/video";
 import { useSpeechToText, type DictationLang } from "@/lib/speech";
 import { nowCairo } from "@/lib/utils";
 import { useToast } from "@/components/ui/toast";
@@ -379,6 +380,11 @@ export default function AssistantPage() {
     if (!question || busy) return;
 
     const attachments = opts?.keepAttachments ?? images;
+    // A link pasted into the box is a video to watch, not a string to read.
+    // The link stays in the question as well - the student wrote it, and the
+    // thread they read afterwards should show what they asked - but the model
+    // is given the video itself.
+    const videos = findYouTubeLinks(question).map((uri) => ({ uri }));
     // An edit supplies its own text, so clearing the box would throw away
     // whatever the student had started typing for their next question.
     if (!opts) {
@@ -449,6 +455,7 @@ export default function AssistantPage() {
             dataUrl: a.uri,
             mime: a.uri.match(/^data:([^;]+);/)?.[1] ?? "image/png",
           })),
+          videos,
         }),
         signal: ac.signal,
       });

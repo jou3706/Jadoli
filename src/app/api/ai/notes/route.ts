@@ -3,7 +3,7 @@ import { z } from "zod";
 import { completeJson } from "@/lib/ai/providers";
 import { extractJson } from "@/lib/ai/extract";
 import { buildNotesPrompt } from "@/lib/ai/prompts";
-import { loadMaterials, skipReason } from "@/lib/ai/material-fetch";
+import { loadMaterials, skipReason, VIDEO_INSTRUCTION } from "@/lib/ai/material-fetch";
 import { notesSchema, tidyNotes } from "@/lib/ai/notes";
 import { taskModel } from "@/lib/ai/routing";
 import { guardAiRequest } from "@/lib/ai/rate-limit";
@@ -50,7 +50,8 @@ export async function POST(req: Request) {
 
   const loaded = await loadMaterials(req, [{ id: materialId, title: "" }], ac.signal);
   const file = loaded.materials[0];
-  if (!file) {
+  const video = loaded.videos[0];
+  if (!file && !video) {
     const s = loaded.skipped[0];
     return NextResponse.json(
       {
@@ -66,10 +67,15 @@ export async function POST(req: Request) {
     const out = await completeJson(
       taskModel("import", true),
       buildNotesPrompt(language),
-      `Write out this lecture as notes: ${file.title || "lecture"}.`,
-      [{ dataUrl: file.dataUrl, mime: file.mime }],
-      ac.signal,
-      true,
+      video
+        ? [`Write out this lecture as notes: ${video.title || "lecture"}.`, VIDEO_INSTRUCTION].join("\n")
+        : `Write out this lecture as notes: ${file?.title || "lecture"}.`,
+      {
+        images: file ? [{ dataUrl: file.dataUrl, mime: file.mime }] : undefined,
+        videos: video ? [{ uri: video.uri }] : undefined,
+        signal: ac.signal,
+        json: true,
+      },
     );
 
     const result = notesSchema.safeParse(extractJson(out));

@@ -27,7 +27,11 @@ import {
   vibrate,
 } from "@/lib/alarm-sound";
 import { notificationsEnabled, setAlarmPref, soundEnabled } from "@/lib/alarm-prefs";
-import { isPushSubscribed, shouldNotifyInApp } from "@/lib/push-subscription";
+import {
+  isPushSubscribed,
+  reportAlarmsLive,
+  shouldNotifyInApp,
+} from "@/lib/push-subscription";
 import { useAlarmPrefs } from "@/hooks/use-alarm-prefs";
 
 /**
@@ -139,6 +143,23 @@ export function useEventAlarms() {
     return () => clearInterval(id);
   }, []);
 
+  /**
+   * Tell the worker this page is awake.
+   *
+   * The worker stands down for a push while the page is in front of the student,
+   * because the page's own alarm is the one that stays on the screen. It needs
+   * to hear that the page is alive to do that: a page that has been closed or
+   * backgrounded must not silence the push, or a reminder would arrive to
+   * nobody. Renewed on a timer, because "alive" is not a thing that is said
+   * once.
+   */
+  useEffect(() => {
+    if (!who) return;
+    reportAlarmsLive();
+    const id = setInterval(() => reportAlarmsLive(), 30_000);
+    return () => clearInterval(id);
+  }, [who]);
+
   /** Ring for the next eligible event, or stay quiet. */
   const check = useCallback(
     async (now: Date) => {
@@ -155,7 +176,15 @@ export function useEventAlarms() {
           notificationsEnabled() &&
           "Notification" in window &&
           Notification.permission === "granted" &&
-          shouldNotifyInApp(await isPushSubscribed())
+          // The page says something when it is the one in front of the student,
+          // and whenever there is no push to say it for them. A push that is
+          // subscribed but not being delivered is a push that says nothing, and
+          // a phone that hears the alarm and sees no reminder has been told
+          // nothing at all.
+          shouldNotifyInApp({
+            visible: document.visibilityState === "visible",
+            subscribed: await isPushSubscribed(),
+          })
         ) {
           const options: AlarmNotification = {
             body: [next.subject_key, next.start_time].filter(Boolean).join(" · "),

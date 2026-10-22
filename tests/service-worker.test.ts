@@ -98,14 +98,14 @@ type Harness = {
   /** Windows the worker asked the browser to open. */
   opened: string[];
   /** Windows the browser reported as already open. */
-  windows: { url: string; focused?: boolean }[];
+  windows: { url: string; focused?: boolean; visibilityState?: string }[];
 };
 
 async function boot(
   opts: {
     online?: boolean;
     cached?: Entry[];
-    windows?: { url: string }[];
+    windows?: { url: string; focused?: boolean; visibilityState?: string }[];
     /** The cache names the browser is holding, newest first. */
     cacheNames?: string[];
   } = {},
@@ -117,7 +117,8 @@ async function boot(
   const caches = fakeCaches(opts.cached ?? [], opts.cacheNames);
   const shown: Shown[] = [];
   const opened: string[] = [];
-  const windows: { url: string; focused?: boolean }[] = opts.windows ?? [];
+  const windows: { url: string; focused?: boolean; visibilityState?: string }[] =
+    opts.windows ?? [];
 
   const fetchMock = async (request: { url: string; cache?: string }) => {
     calls.push(request.url);
@@ -639,6 +640,13 @@ async function push(h: Harness, data: unknown) {
   await waited;
 }
 
+/** The page saying that it is awake and ringing its own alarms. */
+async function alarmsLive(h: Harness) {
+  (h.listeners.message as (e: unknown) => void)({
+    data: { type: "jadwali:alarms-live" },
+  });
+}
+
 /** Runs a notification tap through the worker. */
 async function tap(h: Harness, data: unknown) {
   let closed = 0;
@@ -719,4 +727,52 @@ test("a route that is not a path cannot send the tap off the app", async () => {
   const h = await boot();
   await tap(h, { url: "https://elsewhere.test/phish" });
   assert.deepEqual(h.opened, [`${ORIGIN}/events`]);
+});
+
+// ─────────────────────────────────────────────────────────────
+// One notification per alarm
+// ─────────────────────────────────────────────────────────────
+
+test("a push steps aside while the page is in front and awake", async () => {
+  // The page's own alarm is the sticky one - it asks to stay on the screen
+  // until it is dismissed - and the push's notification is not. A push that
+  // landed on top of it replaced the sticky one with one that times out, which
+  // is how a reminder turned into something that quietly disappeared.
+  const h = await boot({
+    windows: [{ url: `${ORIGIN}/week`, visibilityState: "visible" }],
+  });
+  await alarmsLive(h);
+  await push(h, { title: "Physics 1", body: "exam at 09:00", tag: "e1:2026-10-20:09:00" });
+  assert.equal(h.shown.length, 0, "the page has it already");
+});
+
+test("a push still arrives when the page is not in front", async () => {
+  // The tab is in the background: the page's notification would be one nobody
+  // looks at, so the push is the one that has to be shown.
+  const h = await boot({
+    windows: [{ url: `${ORIGIN}/week`, visibilityState: "hidden" }],
+  });
+  await alarmsLive(h);
+  await push(h, { title: "Physics 1", body: "exam at 09:00", tag: "e1:2026-10-20:09:00" });
+  assert.equal(h.shown.length, 1, "a hidden page must not silence the reminder");
+});
+
+test("a push still arrives when the page has stopped answering", async () => {
+  // The page said it was awake a long time ago, or never said it at all: it has
+  // been closed, crashed or backgrounded. Silencing the push now would deliver
+  // the reminder to nobody.
+  const h = await boot({
+    windows: [{ url: `${ORIGIN}/week`, visibilityState: "visible" }],
+  });
+  await push(h, { title: "Physics 1", body: "exam at 09:00", tag: "e1:2026-10-20:09:00" });
+  assert.equal(h.shown.length, 1, "a page that is not answering must not silence the push");
+});
+
+test("a push is shown when the only window is another site's", async () => {
+  const h = await boot({
+    windows: [{ url: "https://elsewhere.test/other", visibilityState: "visible" }],
+  });
+  await alarmsLive(h);
+  await push(h, { title: "Physics 1", body: "exam at 09:00" });
+  assert.equal(h.shown.length, 1);
 });

@@ -21,6 +21,7 @@ import { groupBySubject, lectureKindLabel, searchLectures } from "@/lib/schedule
 import { colorStyle, dayName } from "@/lib/constants";
 import { cn, formatTime } from "@/lib/utils";
 import { detectKind } from "@/lib/materials";
+import { youtubeLabel } from "@/lib/ai/video";
 import { SubjectCoverTile } from "@/components/subjects/subject-cover";
 import { AddMaterialRow } from "@/components/subjects/add-material-row";
 import { SubjectMaterialsDialog } from "@/components/subjects/subject-materials-dialog";
@@ -133,11 +134,18 @@ function SubjectCard({
   function addLink(url: string) {
     ensureRow();
     let title = "";
-    try {
-      title = decodeURIComponent(url.split("/").pop()?.split("?")[0] || url);
-    } catch {
-      // A malformed % in the pasted link throws, and that must not kill the add.
-      title = url;
+    // The end of a YouTube address is either "watch" or the video's id, and
+    // neither of them says what the student saved.
+    const video = youtubeLabel(url);
+    if (video) {
+      title = video;
+    } else {
+      try {
+        title = decodeURIComponent(url.split("/").pop()?.split("?")[0] || url);
+      } catch {
+        // A malformed % in the pasted link throws, and that must not kill the add.
+        title = url;
+      }
     }
     void createMaterial({
       title: (title || url).slice(0, 80),

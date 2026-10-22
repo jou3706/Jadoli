@@ -8,9 +8,19 @@ import {
   type KeyState,
 } from "./keys";
 import { fallbackChain, type ModelDef, type ModelId } from "./models";
+import { VIDEO_MIME } from "./video";
 
 export type ChatTurn = { role: "user" | "assistant"; text: string };
 export type ImagePart = { dataUrl: string; mime: string };
+/**
+ * A video, given by its address rather than by its bytes.
+ *
+ * Gemini fetches the video itself, so a recording of a lecture never travels
+ * through this server and never runs into the platform's limit on how large a
+ * request may be - which is the same limit that made lecture files be read
+ * here rather than in the browser.
+ */
+export type VideoPart = { uri: string; mime?: string };
 
 export type ChatRequest = {
   model: ModelId;
@@ -18,6 +28,7 @@ export type ChatRequest = {
   history: ChatTurn[];
   question: string;
   images?: ImagePart[];
+  videos?: VideoPart[];
   signal?: AbortSignal;
   /** Ask the provider to emit only syntactically valid JSON. */
   json?: boolean;
@@ -75,6 +86,10 @@ async function streamGemini(
         { text: req.question },
         ...(req.images ?? []).map((img) => ({
           inline_data: { mime_type: img.mime, data: img.dataUrl.split(",")[1] ?? "" },
+        })),
+        // A video is named, not carried: Gemini fetches the address itself.
+        ...(req.videos ?? []).map((v) => ({
+          file_data: { file_uri: v.uri, mime_type: v.mime ?? VIDEO_MIME },
         })),
       ],
     },
@@ -177,6 +192,9 @@ async function streamOpenAICompatible(
     if (!img.mime.startsWith("image/")) continue;
     userContent.push({ type: "image_url", image_url: { url: img.dataUrl } });
   }
+  // A video is not sent here. These pools cannot open one, and the chain only
+  // offers them when there is no video to open - so by the time this runs, a
+  // video could only be here because the chain was built wrong.
 
   const res = await fetch(`https://${host}/chat/completions`, {
     method: "POST",
@@ -293,7 +311,11 @@ async function callProvider(
  * would print the opening of the answer twice.
  */
 export async function streamChat(req: ChatRequest): Promise<string> {
-  const chain = fallbackChain(req.model, (req.images?.length ?? 0) > 0);
+  const chain = fallbackChain(
+    req.model,
+    (req.images?.length ?? 0) > 0,
+    (req.videos?.length ?? 0) > 0,
+  );
   if (!chain.some((m) => hasKeys(m.provider))) {
     throw new Error(
       `NO_KEYS:${chain[0].provider} — add ${chain[0].provider.toUpperCase()}_API_KEYS to .env.local`,
@@ -346,18 +368,31 @@ export async function streamChat(req: ChatRequest): Promise<string> {
 
 /* ── Non-streaming helper for structured tasks ─────────────── */
 
-export async function completeJson(
-  modelId: ModelId,
-  system: string,
-  user: string,
-  images?: ImagePart[],
-  signal?: AbortSignal,
+export type CompleteOptions = {
+  images?: ImagePart[];
+  videos?: VideoPart[];
+  signal?: AbortSignal;
   /**
    * Ask the provider to constrain the reply to JSON. Only for callers that want
    * a JSON *object*: OpenAI/Groq's JSON mode cannot return a bare array, so the
    * list-returning callers leave it off and rely on the prompt and the extractor.
    */
-  json = false,
+  json?: boolean;
+};
+
+/**
+ * One answer, in full, as a string.
+ *
+ * The options are an object rather than a list of positionals because the list
+ * has grown: an image, a video, a signal and a flag, in that order, is a call
+ * site that has to be read carefully to be understood. Named, it says what it
+ * is carrying.
+ */
+export async function completeJson(
+  modelId: ModelId,
+  system: string,
+  user: string,
+  opts: CompleteOptions = {},
 ): Promise<string> {
   let out = "";
   await streamChat({
@@ -365,9 +400,10 @@ export async function completeJson(
     system,
     history: [],
     question: user,
-    images,
-    signal,
-    json,
+    images: opts.images,
+    videos: opts.videos,
+    signal: opts.signal,
+    json: opts.json,
     onToken: (t) => {
       out += t;
     },

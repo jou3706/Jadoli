@@ -72,8 +72,10 @@ export async function POST(req: Request) {
       images.length === 1
         ? "Extract the timetable from this image."
         : `Extract the timetable from these ${images.length} images, in order. Merge into one list.`,
-      images.map((i) => ({ dataUrl: i.dataUrl, mime: i.mime })),
-      ac.signal,
+      {
+        images: images.map((i) => ({ dataUrl: i.dataUrl, mime: i.mime })),
+        signal: ac.signal,
+      },
     );
   } catch (e) {
     const err = e as Error;

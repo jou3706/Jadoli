@@ -41,6 +41,13 @@ type SubscriptionInsert = Omit<StoredSubscription, "id"> & {
 };
 type DeliveryInsert = { user_id: string; alarm_key: string; sent_at?: string };
 type EventInsert = Partial<EventRow> & { user_id: string; date: string };
+type TickInsert = {
+  subscriptions?: number;
+  sent?: number;
+  failed?: number;
+  removed?: number;
+  reminders?: number;
+};
 
 type PushDatabase = {
   public: {
@@ -55,6 +62,43 @@ type PushDatabase = {
         Row: { id: string; user_id: string; alarm_key: string; sent_at: string };
         Insert: DeliveryInsert;
         Update: Partial<DeliveryInsert>;
+        Relationships: [];
+      };
+      /**
+       * The heartbeat of the delivery job.
+       *
+       * A row is written every time the sender runs, whether or not it had
+       * anything to send. It is the only thing that can say "the job is alive
+       * and has nothing to say" - without it, a job that stopped running and a
+       * job that ran and found no reminders look exactly the same, which is the
+       * same silence that made a broken reminder look like a quiet week.
+       */
+      push_ticks: {
+        Row: {
+          id: number;
+          at: string;
+          subscriptions: number;
+          sent: number;
+          failed: number;
+          removed: number;
+          reminders: number;
+        };
+        Insert: TickInsert;
+        Update: Partial<TickInsert>;
+        Relationships: [];
+      };
+      /**
+       * The two values the delivery job needs and cannot invent: where the
+       * deployed app is, and the secret that identifies the job to it.
+       *
+       * The live table has been seen in two shapes - `(name, secret)` and
+       * `(name, value)` - so both columns are read and the newer one is
+       * written. Which one is in use is never decided by a guess.
+       */
+      app_secrets: {
+        Row: { name: string; secret: string | null; value: string | null; created_at: string };
+        Insert: { name: string; secret?: string; value?: string };
+        Update: Partial<{ name: string; secret: string | null; value: string | null }>;
         Relationships: [];
       };
       subject_events: {
@@ -77,6 +121,8 @@ export type PushClient = SupabaseClient<PushDatabase>;
 /** The tables this module touches. Named here so a rename breaks one line. */
 const SUBSCRIPTIONS = "push_subscriptions";
 const DELIVERIES = "push_deliveries";
+const TICKS = "push_ticks";
+const SECRETS = "app_secrets";
 
 export type StoredSubscription = {
   id: string;
@@ -205,6 +251,63 @@ export async function forgetSubscription(sb: PushClient, id: string) {
 /** Touches the row that worked, so pruning can tell live ones from forgotten. */
 export async function touchSubscription(sb: PushClient, id: string) {
   await sb.from(SUBSCRIPTIONS).update({ last_seen: new Date().toISOString() }).eq("id", id);
+}
+
+/**
+ * Records that the delivery job ran.
+ *
+ * Written whether or not there was anything to send, because "the job ran and
+ * had nothing to say" and "the job did not run" are the two answers a person
+ * needs, and only the first of them leaves a mark. A heartbeat that is only
+ * written when something is sent cannot tell a quiet week from a dead job.
+ */
+export async function recordTick(sb: PushClient, counts: TickInsert) {
+  const { error } = await sb.from(TICKS).insert({
+    subscriptions: counts.subscriptions ?? 0,
+    sent: counts.sent ?? 0,
+    failed: counts.failed ?? 0,
+    removed: counts.removed ?? 0,
+    reminders: counts.reminders ?? 0,
+  });
+  if (error) throw new Error(`TICK:${error.message}`);
+}
+
+/**
+ * The most recent heartbeat, or null when there has never been one.
+ *
+ * Null is a real answer - it means the job has never run - and it is not the
+ * same as an old row.
+ */
+export async function lastTick(sb: PushClient) {
+  const { data, error } = await sb
+    .from(TICKS)
+    .select("at,subscriptions,sent,failed,removed,reminders")
+    .order("at", { ascending: false })
+    .limit(1);
+  if (error) throw new Error(`TICK:${error.message}`);
+  const row = (data ?? [])[0];
+  return row ?? null;
+}
+
+/**
+ * The delivery job's own configuration, read the way the database holds it.
+ *
+ * Returns the names that are set and the address of the deployed app, and
+ * never the secret itself: this is what a health check answers with, and a
+ * secret printed in a browser console is a secret in a screenshot.
+ */
+export async function deliveryConfig(sb: PushClient) {
+  const { data, error } = await sb.from(SECRETS).select("name,secret,value");
+  if (error) throw new Error(`SECRETS:${error.message}`);
+  const rows = (data ?? []) as { name: string; secret: string | null; value: string | null }[];
+  const byName = new Map(rows.map((r) => [r.name, r]));
+  const url = byName.get("push_api_url");
+  const secret = byName.get("push_cron_secret");
+  return {
+    apiUrl: (url?.value ?? url?.secret ?? "").trim() || null,
+    apiUrlSet: Boolean((url?.value ?? url?.secret ?? "").trim()),
+    cronSecretSet: Boolean((secret?.value ?? secret?.secret ?? "").trim()),
+  };
 }
 
 export { isGoneStatus, subscriptionSchema, alarmKey };

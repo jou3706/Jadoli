@@ -19,6 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { detectKind, kindMeta, pickerMaterials, safeUrl, sharedFileCounts, type MaterialKindId } from "@/lib/materials";
+import { isYouTubeVideo } from "@/lib/ai/video";
 import { SyllabusDialog } from "@/components/subjects/syllabus-dialog";
 import { SummaryButton } from "@/components/subjects/summary-button";
 import { NotesButton } from "@/components/subjects/notes-button";
@@ -57,6 +58,16 @@ export function MaterialRow({
   const kind = kindMeta(kindId);
   const KindIcon = KIND_ICONS[kindId];
   const href = safeUrl(material.url);
+  /**
+   * Whether anything can be read out of this row.
+   *
+   * A file this app holds is read through the student's own storage, and a
+   * saved YouTube link is watched by the model itself. An uploaded video is
+   * neither: there is no transcript of it here, and the file is not something a
+   * model reads.
+   */
+  const readable =
+    (Boolean(material.file_path) && kindId !== "video") || isYouTubeVideo(material.url);
 
   async function del() {
     setBusy(true);
@@ -117,9 +128,10 @@ export function MaterialRow({
       </div>
 
       <div className="flex shrink-0 gap-0.5">
-        {/* Only a file this app holds can be read: the route fetches it through
-            the student's own storage, and a link has no file behind it. */}
-        {material.file_path && kindId !== "video" && (
+        {/* Only something a model can open is offered: the route fetches a file
+            through the student's own storage, and a YouTube link is watched by
+            the model itself. */}
+        {readable && (
           <>
             <NotesButton material={material} />
             <SummaryButton material={material} />

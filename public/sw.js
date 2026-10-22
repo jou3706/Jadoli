@@ -28,7 +28,7 @@
  * chunks, and the old JavaScript, with no way to tell - the app loads, and it
  * is simply the app as it was before the fix.
  */
-const VERSION = "jadwali-v12";
+const VERSION = "jadwali-v13";
 /**
  * Every route the app can open, because a page that is not cached is not
  * merely missing - it is worse than missing. The worker falls back to the home
@@ -201,6 +201,29 @@ self.addEventListener("activate", (event) => {
 });
 
 /**
+ * When the page last said it was awake.
+ *
+ * A push and an open page both answer for the same event, and the one that
+ * arrives second replaces the first in the tray. The in-app alarm asks to stay
+ * on the screen until it is dismissed; the push's notification does not. So the
+ * push is the one that steps aside - but only while the page is really in front
+ * of the student and really answering its alarms. A page that has been closed,
+ * crashed or left in the background must not silence the push, or a reminder
+ * would arrive to nobody.
+ */
+let alarmsLiveAt = 0;
+
+/**
+ * How long a claim of "the page is awake" is believed.
+ *
+ * The page renews it every half minute; two minutes of silence is a page that
+ * is gone. It is generous rather than tight on purpose: a claim that expires
+ * early means a duplicate notification, and a duplicate that replaces a sticky
+ * one is the exact thing this is here to prevent.
+ */
+const LIVE_FOR_MS = 120_000;
+
+/**
  * The page reports the assets it actually used, so they are in the cache
  * before the user loses signal.
  *
@@ -214,7 +237,14 @@ self.addEventListener("message", (event) => {
   const data = event.data;
   // Both names are accepted: a page still running the build from before the
   // rename speaks the old one, and the worker it is talking to is this one.
-  if (!data || (data.type !== "jadwali:warm" && data.type !== "jadoli:warm") || !Array.isArray(data.urls)) return;
+  if (!data) return;
+  if (data.type === "jadwali:alarms-live" || data.type === "jadoli:alarms-live") {
+    // The page is awake and ringing its own alarms. See `alarmsLiveAt`.
+    alarmsLiveAt = Date.now();
+    return;
+  }
+  if (data.type !== "jadwali:warm" && data.type !== "jadoli:warm") return;
+  if (!Array.isArray(data.urls)) return;
   const urls = data.urls.filter(
     (u) => typeof u === "string" && u.startsWith(self.location.origin),
   );
@@ -265,24 +295,53 @@ const readPush = (event) => {
   }
 };
 
+/**
+ * The windows this app has open, and whether one of them is in front.
+ *
+ * `visibilityState` is the honest answer to "is the student looking at this":
+ * a tab in the background is hidden, and a notification raised for a hidden tab
+ * is a notification nobody looks at.
+ */
+const ownWindows = async () => {
+  const list = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+  return list.filter((c) => {
+    try {
+      return c.url && new URL(c.url).origin === self.location.origin;
+    } catch {
+      return false;
+    }
+  });
+};
+
 self.addEventListener("push", (event) => {
   const data = readPush(event);
   event.waitUntil(
-    self.registration.showNotification(pushTitle(data), {
-      body: pushBody(data),
-      // The tag is the reminder's identity, so a second push for the same
-      // reminder replaces the first in the tray instead of stacking up beside
-      // it. Without it, a retry looks like two exams.
-      tag: typeof data.tag === "string" && data.tag ? data.tag : undefined,
-      data: { url: typeof data.url === "string" ? data.url : PUSH_FALLBACK },
-      icon: "/icon.svg",
-      badge: "/icon.svg",
-      // Silent:false would be the default, but a reminder that arrives while the
-      // app is open should not make a sound the page has already made.
-      silent: false,
-      vibrate: [200, 100, 200],
-      lang: "ar",
-    }),
+    (async () => {
+      const windows = await ownWindows();
+      const inFront = windows.some((c) => c.visibilityState === "visible");
+      const awake = Date.now() - alarmsLiveAt < LIVE_FOR_MS;
+      if (inFront && awake) {
+        // The page is in front of the student and it is ringing this alarm
+        // itself. Its notification is the sticky one; showing a second one
+        // under the same tag would replace it with one that times out.
+        return;
+      }
+      await self.registration.showNotification(pushTitle(data), {
+        body: pushBody(data),
+        // The tag is the reminder's identity, so a second push for the same
+        // reminder replaces the first in the tray instead of stacking up beside
+        // it. Without it, a retry looks like two exams.
+        tag: typeof data.tag === "string" && data.tag ? data.tag : undefined,
+        data: { url: typeof data.url === "string" ? data.url : PUSH_FALLBACK },
+        icon: "/icon.svg",
+        badge: "/icon.svg",
+        // Silent:false would be the default, but a reminder that arrives while the
+        // app is open should not make a sound the page has already made.
+        silent: false,
+        vibrate: [200, 100, 200],
+        lang: "ar",
+      });
+    })(),
   );
 });
 
@@ -320,7 +379,13 @@ self.addEventListener("notificationclick", (event) => {
         // An open Jadwali window anywhere is the one to reuse, whichever route it
         // happens to be showing: the app navigates on the client, so posting a
         // message to it lands on the right screen without a reload.
-        const open = list.find((c) => c.url && new URL(c.url).origin === self.location.origin);
+        const open = list.find((c) => {
+          try {
+            return c.url && new URL(c.url).origin === self.location.origin;
+          } catch {
+            return false;
+          }
+        });
         if (!open) return self.clients.openWindow(url);
         if ("focus" in open) return open.focus();
         return undefined;

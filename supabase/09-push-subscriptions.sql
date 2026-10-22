@@ -25,6 +25,10 @@
 --
 -- and PUSH_CRON_SECRET on Vercel must be the SAME string as push_cron_secret. The
 -- two values seeded below are placeholders on purpose; replace them before launch.
+--
+-- This file is written to be run again at any time. Every statement in it is
+-- either "if it is not there, make it" or "make it so", and the one thing it
+-- must never do is leave two delivery jobs racing against each other.
 
 begin;
 
@@ -34,21 +38,47 @@ begin;
 
 create table if not exists public.app_secrets (
   name  text primary key,
-  value text not null
+  value text not null,
+  -- The column this table was first created with. Both are kept, and both are
+  -- read: a database that already has the table in the other shape must not be
+  -- told to start over, and a job that reads one column must find the value
+  -- whichever column it is in.
+  secret text,
+  created_at timestamptz not null default now()
 );
+
+-- The table exists in the wild in two shapes - `(name, secret, created_at)` and
+-- `(name, value)` - and the second one is this file's idea of it. Both are
+-- repaired here rather than chosen between, because the alternative is a file
+-- that refuses to run against a database that is otherwise perfectly good.
+alter table public.app_secrets add column if not exists value text;
+alter table public.app_secrets add column if not exists secret text;
+alter table public.app_secrets add column if not exists created_at timestamptz not null default now();
+
+-- Copy across, in both directions, so whichever column holds the value the
+-- other one does too. A row with no value at all is left alone: it is a name
+-- with nothing behind it, and inventing a value for it would be inventing a
+-- secret.
+update public.app_secrets set value = secret where value is null and secret is not null;
+update public.app_secrets set secret = value where secret is null and value is not null;
 
 alter table public.app_secrets enable row level security;
 
 -- RLS on with no policies, and the functions revoked below, means the only way
 -- in is the SQL editor (or another security-definer function running as
 -- postgres): a student's browser cannot read or write any of it.
+--
+-- The getter reads both columns and takes whichever has something in it. The
+-- setter writes both, because the live table has `secret` marked NOT NULL and
+-- a write that left it empty would be refused.
 create or replace function public.get_secret(p_name text)
 returns text
 language sql
+stable
 security definer
 set search_path = public
 as $$
-  select value from public.app_secrets where name = p_name
+  select coalesce(value, secret) from public.app_secrets where name = p_name
 $$;
 
 create or replace function public.set_secret(p_name text, p_value text)
@@ -57,17 +87,17 @@ language sql
 security definer
 set search_path = public
 as $$
-  insert into public.app_secrets (name, value) values (p_name, p_value)
-  on conflict (name) do update set value = excluded.value
+  insert into public.app_secrets (name, value, secret) values (p_name, p_value, p_value)
+  on conflict (name) do update set value = excluded.value, secret = excluded.secret
 $$;
 
 revoke all on function public.get_secret(text) from public, anon, authenticated;
 revoke all on function public.set_secret(text, text) from public, anon, authenticated;
 
 -- Seeds are `do nothing` so re-running this file never clobbers a real value.
-insert into public.app_secrets (name, value) values
-  ('push_api_url', 'https://jadoli.vercel.app/api/push/send'),
-  ('push_cron_secret', 'replace-me-before-going-live')
+insert into public.app_secrets (name, value, secret) values
+  ('push_api_url', 'https://jadoli.vercel.app/api/push/send', 'https://jadoli.vercel.app/api/push/send'),
+  ('push_cron_secret', 'replace-me-before-going-live', 'replace-me-before-going-live')
 on conflict (name) do nothing;
 
 -- ─────────────────────────────────────────────────────────────
@@ -148,6 +178,34 @@ create index if not exists push_deliveries_sent_idx
 -- that guessed the name gets nothing - which is the correct answer.
 alter table public.push_deliveries enable row level security;
 
+-- ─────────────────────────────────────────────────────────────
+-- The job's heartbeat
+-- ─────────────────────────────────────────────────────────────
+
+-- A row is written every time the delivery job runs, whether or not it had
+-- anything to send.
+--
+-- This table is the answer to the question that could not be answered before:
+-- is the job running? Without it, a job that stopped and a job that found
+-- nothing to send look exactly the same, and both of them look like a student
+-- who has no reminders. The health endpoint reads the newest row and says how
+-- long ago it was written.
+create table if not exists public.push_ticks (
+  id bigint generated always as identity primary key,
+  at timestamptz not null default now(),
+  subscriptions integer not null default 0,
+  sent integer not null default 0,
+  failed integer not null default 0,
+  removed integer not null default 0,
+  reminders integer not null default 0
+);
+
+create index if not exists push_ticks_at_idx on public.push_ticks (at desc);
+
+-- No policy, for the same reason as the deliveries table: only the service role
+-- writes here, and only the server reads it.
+alter table public.push_ticks enable row level security;
+
 commit;
 
 -- ─────────────────────────────────────────────────────────────
@@ -160,33 +218,30 @@ commit;
 -- morning digest. A minute of drift is invisible; a day of it is a different
 -- feature.
 --
--- Idempotent on rerun: the old job is unscheduled by name first, so applying
--- this file twice does not leave two jobs racing to send every reminder twice.
+-- Idempotent on rerun: every job that sends reminders is unscheduled first, so
+-- applying this file twice does not leave two jobs racing to send every reminder
+-- twice.
 
--- The delivery job was named jadoli-push before the app rename; unscheduling
--- that name too keeps a database that already ran the old file from ending up
--- with two jobs (which would send every reminder twice).
-select cron.unschedule('jadwali-push') where exists (
-  select 1 from cron.job where jobname = 'jadwali-push'
-);
-select cron.unschedule('jadoli-push') where exists (
-  select 1 from cron.job where jobname = 'jadoli-push'
-);
+-- The extensions the job needs. `pg_cron` holds the schedule and `pg_net` makes
+-- the HTTP call. Both are enabled from the dashboard, and a `create extension`
+-- for an extension that is not enabled fails with a permission error rather than
+-- with anything that explains itself - so the failure is caught and said out
+-- loud, and the rest of this file still runs.
+do $$
+begin
+  create extension if not exists pg_cron with schema pg_catalog;
+exception when others then
+  raise notice 'pg_cron is not enabled: turn it on in Dashboard → Database → Extensions, then run this file again';
+end
+$$;
 
-select cron.schedule(
-  'jadwali-push',
-  '* * * * *',
-  $cron$
-    select net.http_post(
-      url     := public.get_secret('push_api_url'),
-      headers := jsonb_build_object(
-        'Content-Type',  'application/json',
-        'x-cron-secret', public.get_secret('push_cron_secret')
-      ),
-      body    := '{}'::jsonb
-    )
-  $cron$
-);
+do $$
+begin
+  create extension if not exists pg_net with schema extensions;
+exception when others then
+  raise notice 'pg_net is not enabled: turn it on in Dashboard → Database → Extensions, then run this file again';
+end
+$$;
 
 -- Deliveries are only needed until the reminder they stop from repeating has
 -- passed. Anything older than a fortnight describes an event that has already
@@ -198,17 +253,79 @@ security definer
 set search_path = public
 as $$
   delete from public.push_deliveries where sent_at < now() - interval '14 days';
+  delete from public.push_ticks where at < now() - interval '2 days';
 $$;
 
-select cron.unschedule('jadwali-push-prune') where exists (
-  select 1 from cron.job where jobname = 'jadwali-push-prune'
-);
-select cron.unschedule('jadoli-push-prune') where exists (
-  select 1 from cron.job where jobname = 'jadoli-push-prune'
-);
+-- Every job that sends reminders is unscheduled, whatever it is called.
+--
+-- The names below are the ones this file has used. The loop afterwards is the
+-- part that matters: a job is identified by what it does, not by what it is
+-- called, so a database that ran an older version of this file - or one whose
+-- job was named by hand - ends up with exactly one delivery job instead of two
+-- racing to send every reminder twice.
+do $$
+declare
+  r record;
+begin
+  for r in select jobid from cron.job where command like '%api/push/send%' loop
+    perform cron.unschedule(r.jobid);
+  end loop;
+  if exists (select 1 from cron.job where jobname = 'jadwali-push') then
+    perform cron.unschedule('jadwali-push');
+  end if;
+  if exists (select 1 from cron.job where jobname = 'jadoli-push') then
+    perform cron.unschedule('jadoli-push');
+  end if;
+exception when others then
+  raise notice 'could not unschedule the old push jobs: %', sqlerrm;
+end
+$$;
 
-select cron.schedule(
-  'jadwali-push-prune',
-  '17 4 * * *',
-  $cron$ select public.prune_push_deliveries() $cron$
-);
+-- The job reads its address and its secret from the database on every tick, so
+-- moving the deployment or rotating the secret is a change to one table rather
+-- than to a schedule.
+--
+-- The `case` is a guard rather than a decoration: with no address in the table
+-- the call would be made with a null url, which fails on every tick and says
+-- nothing about why.
+do $$
+begin
+  perform cron.schedule(
+    'jadwali-push',
+    '* * * * *',
+    $cron$
+      select case
+        when public.get_secret('push_api_url') is null then null
+        else net.http_post(
+          url     := public.get_secret('push_api_url'),
+          headers := jsonb_build_object(
+            'Content-Type',  'application/json',
+            'x-cron-secret', public.get_secret('push_cron_secret')
+          ),
+          body    := '{}'::jsonb
+        )
+      end
+    $cron$
+  );
+exception when others then
+  raise notice 'could not schedule the push job: %', sqlerrm;
+end
+$$;
+
+do $$
+begin
+  if exists (select 1 from cron.job where jobname = 'jadwali-push-prune') then
+    perform cron.unschedule('jadwali-push-prune');
+  end if;
+  if exists (select 1 from cron.job where jobname = 'jadoli-push-prune') then
+    perform cron.unschedule('jadoli-push-prune');
+  end if;
+  perform cron.schedule(
+    'jadwali-push-prune',
+    '17 4 * * *',
+    $cron$ select public.prune_push_deliveries() $cron$
+  );
+exception when others then
+  raise notice 'could not schedule the prune job: %', sqlerrm;
+end
+$$;

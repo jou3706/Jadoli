@@ -8,22 +8,30 @@ import { shouldNotifyInApp } from "../src/lib/push-subscription.ts";
  *
  * Both paths ring for the same event - the page while it is open, the push job
  * while it is closed - and they used to raise a notification each, under the
- * same tag, so whichever arrived second replaced the first. The fix is that only
- * one of them owns the notification, and which one is decided by whether the
- * browser can be reached with a push at all.
+ * same tag, so whichever arrived second replaced the first. The fix is that
+ * exactly one of them owns the notification, and which one is decided by where
+ * the student is standing rather than by whether a push happens to be
+ * subscribed.
  */
 
-test("a browser with a push does not need the page to shout", () => {
-  // The push will arrive whether or not the tab is open, and it lands within a
-  // minute. The page ringing as well means the second one replaces the first, and
-  // it is the in-app one that gets replaced - the sticky one.
-  assert.equal(shouldNotifyInApp(true), false);
+test("the page in front of the student says something", () => {
+  assert.equal(shouldNotifyInApp({ visible: true, subscribed: false }), true);
+  // And it says something even when a push is subscribed: the worker stands
+  // down while the page is awake, so the page's is the only one there is.
+  assert.equal(shouldNotifyInApp({ visible: true, subscribed: true }), true);
 });
 
-test("a browser without a push has nothing but the page", () => {
-  // Turning this off here would mean an alarm that is silent on a phone with no
-  // subscription: the sound plays, but there is nothing on the lock screen.
-  assert.equal(shouldNotifyInApp(false), true);
+test("a page in the background leaves it to the push", () => {
+  // A notification raised by a hidden tab is a notification nobody looks at,
+  // and the push arrives on the lock screen whether the tab is open or not.
+  assert.equal(shouldNotifyInApp({ visible: false, subscribed: true }), false);
+});
+
+test("with no push at all, the page says it whatever else is true", () => {
+  // There is nobody else to say anything: a phone with no subscription hears the
+  // alarm's sound and must still see it.
+  assert.equal(shouldNotifyInApp({ visible: false, subscribed: false }), true);
+  assert.equal(shouldNotifyInApp({ visible: true, subscribed: false }), true);
 });
 
 test("the rule is wired into the alarm, not merely defined", async () => {
@@ -34,7 +42,9 @@ test("the rule is wired into the alarm, not merely defined", async () => {
     new URL("../src/hooks/use-event-alarms.ts", import.meta.url),
     "utf8",
   );
-  assert.match(source, /shouldNotifyInApp\(await isPushSubscribed\(\)\)/);
+  assert.match(source, /shouldNotifyInApp\(\{/);
+  assert.match(source, /visible: document\.visibilityState === "visible"/);
+  assert.match(source, /subscribed: await isPushSubscribed\(\)/);
   // And it has to be inside the guard that raises the notification, not beside it.
   const raise = source.match(/new Notification\(/);
   assert.ok(raise, "the hook no longer raises a notification at all");
@@ -43,6 +53,24 @@ test("the rule is wired into the alarm, not merely defined", async () => {
     before.includes("shouldNotifyInApp"),
     "the guard must be part of the condition that raises the notification",
   );
+});
+
+test("the page tells the worker that it is awake", async () => {
+  // The worker stands down for a push while the page is in front of the
+  // student. It needs to hear that the page is alive to do that, and "alive" is
+  // not a thing that is said once - so the claim is renewed.
+  const source = await readFile(
+    new URL("../src/hooks/use-event-alarms.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /reportAlarmsLive\(\)/);
+  assert.match(source, /setInterval\(\(\) => reportAlarmsLive\(\)/);
+
+  const lib = await readFile(
+    new URL("../src/lib/push-subscription.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(lib, /jadwali:alarms-live/);
 });
 
 test("turning the switch over clears what the page believes about it", async () => {

@@ -29,17 +29,25 @@ export type ModelDef = {
   supportsImages: boolean;
   /** Gemini reads PDFs natively; the OpenAI-compatible pools are image only. */
   supportsPdf?: boolean;
+  /**
+   * Whether the model can be handed a video.
+   *
+   * Only Gemini is told yes: it takes a video by its address and watches it.
+   * The other pools take text and pictures, and handing them a video link
+   * produces questions about a video nobody opened.
+   */
+  supportsVideo?: boolean;
 };
 
 export const MODELS: ModelDef[] = [
   // Google — best first
-  { id: "gemini-38-flash", provider: "gemini", label: "Gemini 3.8 Flash", upstream: "gemini-3.5-flash", supportsImages: true, supportsPdf: true },
-  { id: "gemini-37-flash", provider: "gemini", label: "Gemini 3.7 Flash", upstream: "gemini-3.8-flash", supportsImages: true, supportsPdf: true },
-  { id: "gemini-36-flash", provider: "gemini", label: "Gemini 3.6 Flash", upstream: "gemini-3.6-flash", supportsImages: true, supportsPdf: true },
-  { id: "gemini-35-flash", provider: "gemini", label: "Gemini 3.5 Flash ★", upstream: "gemini-3.5-flash-lite", supportsImages: true, supportsPdf: true },
-  { id: "gemini-35-flash-lite", provider: "gemini", label: "Gemini 3.5 Flash-Lite", upstream: "gemini-3.5-flash-lite", supportsImages: true, supportsPdf: true },
-  { id: "gemini-31-flash-lite", provider: "gemini", label: "Gemini 3.1 Flash-Lite", upstream: "gemini-3.1-flash-lite", supportsImages: true, supportsPdf: true },
-  { id: "gemini-3-flash", provider: "gemini", label: "Gemini 3 Flash (preview)", upstream: "gemini-3-flash-preview", supportsImages: true, supportsPdf: true },
+  { id: "gemini-38-flash", provider: "gemini", label: "Gemini 3.8 Flash", upstream: "gemini-3.5-flash", supportsImages: true, supportsPdf: true, supportsVideo: true },
+  { id: "gemini-37-flash", provider: "gemini", label: "Gemini 3.7 Flash", upstream: "gemini-3.8-flash", supportsImages: true, supportsPdf: true, supportsVideo: true },
+  { id: "gemini-36-flash", provider: "gemini", label: "Gemini 3.6 Flash", upstream: "gemini-3.6-flash", supportsImages: true, supportsPdf: true, supportsVideo: true },
+  { id: "gemini-35-flash", provider: "gemini", label: "Gemini 3.5 Flash ★", upstream: "gemini-3.5-flash-lite", supportsImages: true, supportsPdf: true, supportsVideo: true },
+  { id: "gemini-35-flash-lite", provider: "gemini", label: "Gemini 3.5 Flash-Lite", upstream: "gemini-3.5-flash-lite", supportsImages: true, supportsPdf: true, supportsVideo: true },
+  { id: "gemini-31-flash-lite", provider: "gemini", label: "Gemini 3.1 Flash-Lite", upstream: "gemini-3.1-flash-lite", supportsImages: true, supportsPdf: true, supportsVideo: true },
+  { id: "gemini-3-flash", provider: "gemini", label: "Gemini 3 Flash (preview)", upstream: "gemini-3-flash-preview", supportsImages: true, supportsPdf: true, supportsVideo: true },
   // Groq
   { id: "groq-120b", provider: "groq", label: "GPT-OSS 120B ★", upstream: "openai/gpt-oss-120b", supportsImages: false },
   { id: "groq-20b", provider: "groq", label: "GPT-OSS 20B", upstream: "openai/gpt-oss-20b", supportsImages: false },
@@ -64,6 +72,9 @@ export const findModel = (id: string): ModelDef =>
 
 /** Whether a model can be handed a picture or a PDF at all. */
 export const readsAttachments = (m: ModelDef) => m.supportsImages || m.supportsPdf === true;
+
+/** Whether a model can be handed a video to watch. */
+export const readsVideos = (m: ModelDef) => m.supportsVideo === true;
 
 /** The order providers are offered in. Gemini reads attachments; the rest are text. */
 export const PROVIDER_ORDER: ProviderId[] = ["gemini", "groq", "openrouter"];
@@ -93,15 +104,25 @@ const PROVIDER_FALLBACK: Record<ProviderId, ModelId[]> = {
  * A request carrying a picture or a PDF only ever sees models that can read
  * one. Handing an image to a text-only model wastes the whole call, so those are
  * filtered out rather than tried and failed.
+ *
+ * A request carrying a video is narrower still: only Gemini watches videos, so
+ * the chain is the Gemini pool and nothing else. A link to a recording is
+ * useless to a model that cannot open it, and the alternative - offering the
+ * whole chain and letting it fail - would spend every key on the same refusal.
  */
-export function fallbackChain(start: ModelId | ModelDef, hasAttachments: boolean): ModelDef[] {
+export function fallbackChain(
+  start: ModelId | ModelDef,
+  hasAttachments: boolean,
+  hasVideo = false,
+): ModelDef[] {
   const first = typeof start === "string" ? findModel(start) : start;
   const seen = new Set<string>();
   const chain: ModelDef[] = [];
   const offer = (id: ModelId) => {
     const m = findModel(id);
     if (seen.has(m.id)) return;
-    if (hasAttachments && !readsAttachments(m)) return;
+    if (hasVideo && !readsVideos(m)) return;
+    if (!hasVideo && hasAttachments && !readsAttachments(m)) return;
     seen.add(m.id);
     chain.push(m);
   };

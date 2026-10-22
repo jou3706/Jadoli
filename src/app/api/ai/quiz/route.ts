@@ -3,7 +3,7 @@ import { completeJson } from "@/lib/ai/providers";
 import { extractJson } from "@/lib/ai/extract";
 import { buildQuizPrompt, buildVerdictPrompt } from "@/lib/ai/prompts";
 import { quizSetSchema, quizSourceSchema, type QuizSet } from "@/lib/ai/schema";
-import { loadMaterials, skipReason } from "@/lib/ai/material-fetch";
+import { loadMaterials, skipReason, attachmentLines, VIDEO_INSTRUCTION } from "@/lib/ai/material-fetch";
 import { taskModel, verifierFor } from "@/lib/ai/routing";
 import { applyFixes, parseVerdict, verdictInput } from "@/lib/ai/quiz-verify";
 import { guardAiRequest } from "@/lib/ai/rate-limit";
@@ -45,7 +45,7 @@ export async function POST(req: Request) {
 
   // Nothing loaded and something was asked for: the student is owed the reason,
   // not an empty exam.
-  if (loaded && loaded.materials.length === 0 && loaded.skipped.length > 0) {
+  if (loaded && loaded.materials.length === 0 && loaded.videos.length === 0 && loaded.skipped.length > 0) {
     const s = loaded.skipped[0];
     return NextResponse.json(
       {
@@ -58,6 +58,7 @@ export async function POST(req: Request) {
   }
 
   const attached = loaded?.materials ?? [];
+  const videos = loaded?.videos ?? [];
 
   const parts: string[] = [];
   parts.push(`language: ${src.language}`);
@@ -71,12 +72,14 @@ export async function POST(req: Request) {
   if (src.subjectKey) {
     parts.push(`subject: ${src.subjectKey}`);
   }
-  // Naming each file tells the model which attachment is which, the same way the
+  // Naming each attachment tells the model which is which, the same way the
   // flashcards route does.
-  if (attached.length) {
-    parts.push(`material_count: ${attached.length}`);
-    attached.forEach((m, i) => parts.push(`material ${i + 1}: ${m.title || "material"}`));
+  const listing = attachmentLines(attached, videos);
+  if (listing.length) {
+    parts.push(`material_count: ${listing.length}`);
+    listing.forEach((line) => parts.push(line));
   }
+  if (videos.length) parts.push(VIDEO_INSTRUCTION);
 
   const user = parts.join("\n");
 
@@ -89,14 +92,19 @@ export async function POST(req: Request) {
     // cannot see for themselves, so the key is checked before it is handed over.
     // Two models from two providers rarely mis-mark the same question, which is
     // the whole value of asking the second one.
-    const writer = taskModel("quiz", attached.length > 0);
+    const writer = taskModel("quiz", attached.length > 0 || videos.length > 0);
     const checker = verifierFor(writer);
     // The provider is asked for JSON and extracts the first balanced value, but a
     // model can still slip once. A single retry turns a formatting hiccup into an
     // exam instead of an error the student cannot act on.
     let set: QuizSet | null = null;
     for (let attempt = 0; attempt < 2 && !set; attempt += 1) {
-      const raw = await completeJson(writer, system, user, images, ac.signal, true);
+      const raw = await completeJson(writer, system, user, {
+        images,
+        videos: videos.map((v) => ({ uri: v.uri })),
+        signal: ac.signal,
+        json: true,
+      });
       const parsed = quizSetSchema.safeParse(extractJson(raw));
       if (parsed.success) set = parsed.data;
     }
@@ -116,9 +124,7 @@ export async function POST(req: Request) {
         checker,
         buildVerdictPrompt(src.language === "en" ? "en" : "ar"),
         verdictInput(set),
-        undefined,
-        ac.signal,
-        true,
+        { signal: ac.signal, json: true },
       );
       const applied = applyFixes(set, parseVerdict(verdict));
       checked = applied.set;

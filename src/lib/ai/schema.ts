@@ -24,12 +24,32 @@ export const attachmentKind = (mime: string) =>
 export const ASSISTANT_MODES = ["general", "materials", "quiz"] as const;
 export type AssistantMode = (typeof ASSISTANT_MODES)[number];
 
+/**
+ * A video, named rather than carried.
+ *
+ * Only the address travels: the model fetches the video itself, so a recording
+ * of a lecture costs no more to ask about than a link does. Nothing else is
+ * accepted here - the model fetches whatever address it is given, and the
+ * address has to be one it is allowed to open.
+ */
+const video = z.object({
+  uri: z
+    .string()
+    .url()
+    .max(600)
+    .refine((u) => /^https:\/\/(www\.)?(youtube\.com|youtube-nocookie\.com|m\.youtube\.com)\//.test(u), {
+      message: "video must be a YouTube address",
+    }),
+  mime: z.string().max(60).optional(),
+});
+
 export const chatBodySchema = z.object({
   model: z.string().min(1).max(60),
   question: z.string().min(1).max(8000),
   mode: z.enum(ASSISTANT_MODES).default("general"),
   history: z.array(turn).max(40).default([]),
   images: z.array(image).max(6).default([]),
+  videos: z.array(video).max(4).default([]),
 });
 
 /**

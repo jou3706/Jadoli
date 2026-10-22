@@ -4,7 +4,7 @@ import { extractArray } from "@/lib/ai/extract";
 import { completeJson } from "@/lib/ai/providers";
 import { buildFlashcardsPrompt } from "@/lib/ai/prompts";
 import { cleanGeneratedCards } from "@/lib/flashcards";
-import { loadMaterials, skipReason } from "@/lib/ai/material-fetch";
+import { loadMaterials, skipReason, attachmentLines, VIDEO_INSTRUCTION } from "@/lib/ai/material-fetch";
 import { taskModel } from "@/lib/ai/routing";
 import { guardAiRequest } from "@/lib/ai/rate-limit";
 
@@ -49,13 +49,14 @@ export async function POST(req: Request) {
 
   const loaded = materials.length
     ? await loadMaterials(req, materials, ac.signal)
-    : { materials: [], skipped: [] };
+    : { materials: [], videos: [], skipped: [] };
 
   const attached = loaded.materials;
+  const videos = loaded.videos;
 
   // Every file asked for failed, and there is nothing else to read. Said plainly,
   // because "no cards" with no reason is indistinguishable from a broken button.
-  if (!attached.length && !text.trim() && loaded.skipped.length) {
+  if (!attached.length && !videos.length && !text.trim() && loaded.skipped.length) {
     const first = loaded.skipped[0];
     return NextResponse.json(
       {
@@ -69,9 +70,10 @@ export async function POST(req: Request) {
 
   const where = subject.trim();
 
-  // Naming each file lets the prompt ask for cards that trace back to a page,
-  // and tells the model which attachment is which when several are attached.
-  const listing = attached.map((m, i) => `${i + 1}. ${m.title.trim() || `material ${i + 1}`}`);
+  // Naming each attachment lets the prompt ask for cards that trace back to a
+  // page, and tells the model which attachment is which when several are
+  // attached.
+  const listing = attachmentLines(attached, videos);
 
   const instruction = [
     `Write up to ${count} revision flashcards${
@@ -80,11 +82,14 @@ export async function POST(req: Request) {
     listing.length
       ? [
           listing.length === 1
-            ? "The attached file is a set of notes for this course:"
-            : `These ${listing.length} attached files are notes for this course:`,
+            ? "One thing is attached to this course:"
+            : `These ${listing.length} things are attached to this course:`,
           ...listing,
           "Read the attachments. Base every question on what they actually say.",
-        ].join("\n")
+          videos.length ? VIDEO_INSTRUCTION : "",
+        ]
+        .filter(Boolean)
+        .join("\n")
       : "",
     text.trim() ? `These are the notes:\n\n"""\n${text.trim()}\n"""` : "",
     listing.length && text.trim()
@@ -97,11 +102,14 @@ export async function POST(req: Request) {
   let raw: string;
   try {
     raw = await completeJson(
-      taskModel("flashcards", attached.length > 0),
+      taskModel("flashcards", attached.length > 0 || videos.length > 0),
       buildFlashcardsPrompt(count),
       instruction,
-      attached.map((m) => ({ dataUrl: m.dataUrl, mime: m.mime })),
-      ac.signal,
+      {
+        images: attached.map((m) => ({ dataUrl: m.dataUrl, mime: m.mime })),
+        videos: videos.map((v) => ({ uri: v.uri })),
+        signal: ac.signal,
+      },
     );
   } catch (e) {
     const err = e as Error;

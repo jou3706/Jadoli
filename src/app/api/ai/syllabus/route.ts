@@ -3,7 +3,7 @@ import { z } from "zod";
 import { completeJson } from "@/lib/ai/providers";
 import { extractJson } from "@/lib/ai/extract";
 import { buildSyllabusPrompt } from "@/lib/ai/prompts";
-import { loadMaterials, skipReason } from "@/lib/ai/material-fetch";
+import { loadMaterials, skipReason, VIDEO_INSTRUCTION } from "@/lib/ai/material-fetch";
 import { syllabusDrafts, syllabusResultSchema } from "@/lib/ai/syllabus";
 import { taskModel } from "@/lib/ai/routing";
 import { guardAiRequest } from "@/lib/ai/rate-limit";
@@ -51,7 +51,8 @@ export async function POST(req: Request) {
 
   const loaded = await loadMaterials(req, [{ id: materialId, title: "" }], ac.signal);
   const file = loaded.materials[0];
-  if (!file) {
+  const video = loaded.videos[0];
+  if (!file && !video) {
     const s = loaded.skipped[0];
     return NextResponse.json(
       {
@@ -70,12 +71,17 @@ export async function POST(req: Request) {
       taskModel("import", true),
       buildSyllabusPrompt(today, subject.trim()),
       [
-        `Read the attached syllabus: ${file.title || "syllabus"}.`,
+        video
+          ? `Watch the attached video: ${video.title || "syllabus"}. ${VIDEO_INSTRUCTION}`
+          : `Read the attached syllabus: ${file?.title || "syllabus"}.`,
         `List every dated thing in it for ${language === "en" ? "English" : "Arabic"}.`,
       ].join("\n"),
-      [{ dataUrl: file.dataUrl, mime: file.mime }],
-      ac.signal,
-      true,
+      {
+        images: file ? [{ dataUrl: file.dataUrl, mime: file.mime }] : undefined,
+        videos: video ? [{ uri: video.uri }] : undefined,
+        signal: ac.signal,
+        json: true,
+      },
     );
 
     const result = syllabusResultSchema.safeParse(extractJson(out));
@@ -88,7 +94,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({
       subject: subject.trim(),
-      title: file.title,
+      title: file?.title ?? video?.title ?? "",
       events: syllabusDrafts(result.data.events, {
         today,
         fallbackSubject: subject.trim() || undefined,

@@ -107,7 +107,7 @@ test("the row decides the path, not the request body", async () => {
   const text = await fetchSrc();
   // The client's own file_path arrives on the schema but is never used: a
   // material id paired with someone else's path must not read that path.
-  assert.match(text, /\.select\("file_path,title"\)/);
+  assert.match(text, /\.select\("file_path,title,url"\)/);
   assert.match(text, /isOwnPath\(path, userId\)/);
 });
 
