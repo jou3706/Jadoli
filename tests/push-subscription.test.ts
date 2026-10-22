@@ -90,3 +90,38 @@ test("turning the switch over clears what the page believes about it", async () 
   );
   assert.match(mod, /export const invalidatePushSubscription = \(\) => \{\s*cached = null;/);
 });
+
+test("a subscription made under an old key is repaired, not left failing", async () => {
+  // The failure this prevents is silent and total: a subscription made under a
+  // key pair that no longer signs for it is refused by the push service with a
+  // bare 403, the browser still believes it is subscribed, the job runs every
+  // minute, and no reminder ever arrives.
+  const source = await readFile(new URL("../src/hooks/use-push.ts", import.meta.url), "utf8");
+  // The browser has to compare the key the subscription was made with against
+  // the one the deployment publishes now.
+  assert.match(source, /sameApplicationKey\(existing, vapidPublicKey\)/);
+  assert.match(source, /options\?\.applicationServerKey/);
+  // And when they differ, it has to subscribe again under the current key.
+  assert.match(source, /renew\(reg, existing, vapidPublicKey\)/);
+  assert.match(source, /pushManager\.subscribe\(\{/);
+  // The dead row is removed from the server, or the job keeps trying it.
+  assert.match(source, /await unsubscribe\(oldEndpoint\)/);
+});
+
+test("the repair needs the permission it is going to use", async () => {
+  // Re-subscribing is the browser's own business, but it still needs the
+  // permission to have been granted - asking again would be a prompt the
+  // student never agreed to.
+  const source = await readFile(new URL("../src/hooks/use-push.ts", import.meta.url), "utf8");
+  assert.match(source, /if \(Notification\.permission !== "granted"\) return false;/);
+});
+
+test("a subscription that cannot be told apart is left alone", async () => {
+  // Some browsers do not expose the key a subscription was made with. Guessing
+  // there would churn a working subscription for nothing, so "cannot tell" is
+  // its own answer and not a mismatch.
+  const source = await readFile(new URL("../src/hooks/use-push.ts", import.meta.url), "utf8");
+  assert.match(source, /if \(!stored\) return null;/);
+  assert.match(source, /=== false/);
+});
+

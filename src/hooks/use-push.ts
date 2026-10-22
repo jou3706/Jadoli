@@ -63,6 +63,36 @@ function keyBytes(base64: string): Uint8Array<ArrayBuffer> {
   return out;
 }
 
+/** The bytes of whatever the browser stored, whatever shape it stored them in. */
+function storedBytes(source: BufferSource): Uint8Array {
+  if (source instanceof ArrayBuffer) return new Uint8Array(source);
+  const view = source as ArrayBufferView;
+  return new Uint8Array(view.buffer as ArrayBuffer, view.byteOffset, view.byteLength);
+}
+
+/**
+ * Whether a subscription was made with the key this deployment publishes now.
+ *
+ * A subscription is bound to the key pair that created it. When the pair is
+ * replaced - a fresh deployment, a rotated secret - every subscription made
+ * under the old pair stops being deliverable, and the push service says so
+ * with a bare 403. The browser still believes it is subscribed, so the switch
+ * is on, the job runs every minute, and nothing ever arrives: a reminder that
+ * is on and cannot be delivered.
+ *
+ * Null means "cannot be told": the browser does not expose the key it used, and
+ * re-subscribing on a guess would churn a working subscription for nothing.
+ */
+function sameApplicationKey(subscription: PushSubscription, publicKey: string): boolean | null {
+  const stored = subscription.options?.applicationServerKey;
+  if (!stored) return null;
+  const a = storedBytes(stored);
+  const b = keyBytes(publicKey);
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+  return true;
+}
+
 /** The zone this browser is on, or UTC when it will not say. */
 const zone = () => {
   try {
@@ -92,7 +122,23 @@ export function usePush(): PushStatus {
 
         const reg = await navigator.serviceWorker.ready;
         const existing = await reg.pushManager.getSubscription();
-        if (live) setState(existing ? "on" : "off");
+        if (!existing) {
+          if (live) setState("off");
+          return;
+        }
+
+        // A subscription made under a key this deployment no longer uses cannot
+        // be delivered to. It is replaced here rather than left failing on
+        // every tick of the delivery job, and the student is not asked to do
+        // anything: the browser is the only party that can make a subscription,
+        // and it can make a new one without being asked twice.
+        if (sameApplicationKey(existing, vapidPublicKey) === false) {
+          const renewed = await renew(reg, existing, vapidPublicKey);
+          if (live) setState(renewed ? "on" : "off");
+          return;
+        }
+
+        if (live) setState("on");
       } catch {
         /* offline, or no worker yet: reported as unavailable until asked again */
       }
@@ -155,6 +201,36 @@ type PushSubscriptionJSON = {
   endpoint?: string;
   keys?: { p256dh?: string; auth?: string };
 };
+
+/**
+ * Re-subscribes this browser under the key the deployment publishes now.
+ *
+ * The old row is removed from the server first: a row that cannot be delivered
+ * to is a row the delivery job tries every minute and fails on every minute.
+ * Then the browser is asked for a new subscription, which it can do on its own
+ * as long as the permission was already granted.
+ */
+async function renew(
+  reg: ServiceWorkerRegistration,
+  old: PushSubscription,
+  publicKey: string,
+): Promise<boolean> {
+  if (Notification.permission !== "granted") return false;
+  const oldEndpoint = old.endpoint;
+  try {
+    await old.unsubscribe();
+    if (oldEndpoint) await unsubscribe(oldEndpoint);
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: keyBytes(publicKey),
+    });
+    await save(sub.toJSON() as PushSubscriptionJSON);
+    invalidatePushSubscription();
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 /** Saves the endpoint, and the zone that says whose clock the reminders are on. */
 async function save(json: PushSubscriptionJSON) {

@@ -169,8 +169,17 @@ export function reminderRange(now: Date, timeZone: string): { from: string; to: 
  *
  * A push service answers 404 or 410 when the endpoint it holds is gone - the
  * browser cleared it, or the profile was removed - and retrying it forever grows
- * the table with rows that can never work. Anything else is a transient problem
- * worth trying again, and dropping the subscription over a bad afternoon would
- * silently take a student's reminders away.
+ * the table with rows that can never work.
+ *
+ * 403 is the third one, and it is the reason a whole account could sit silent:
+ * a subscription is bound to the key pair that created it, and when the pair is
+ * replaced the push service refuses every send to that subscription with a
+ * Forbidden. It is not a bad afternoon - it can never work with this key - and
+ * the browser repairs itself by subscribing again under the new key. Anything
+ * else (a 429, a 5xx, and a 401, which is about our own signature rather than
+ * about the subscription) is transient and worth trying again: dropping the
+ * subscription over one of those would silently take a student's reminders
+ * away.
  */
-export const isGoneStatus = (status: number) => status === 404 || status === 410;
+export const isGoneStatus = (status: number) =>
+  status === 404 || status === 410 || status === 403;

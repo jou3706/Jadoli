@@ -166,11 +166,15 @@ test("a zone the runtime does not know is refused, not stored as UTC", () => {
   assert.equal(subscriptionSchema.parse(base).timeZone, "UTC");
 });
 
-test("only a vanished endpoint retires a subscription", () => {
+test("only a subscription that can never work again retires", () => {
   assert.equal(isGoneStatus(404), true);
   assert.equal(isGoneStatus(410), true);
+  // 403 is the key mismatch: this subscription was made under a key pair that
+  // no longer signs for it, so it can never be delivered to again. The browser
+  // subscribes again under the current key.
+  assert.equal(isGoneStatus(403), true);
   // Everything else is a bad afternoon, not a reason to take reminders away.
-  for (const status of [400, 401, 403, 429, 500, 502, 503]) {
+  for (const status of [400, 401, 429, 500, 502, 503]) {
     assert.equal(isGoneStatus(status), false, `${status} must be retried, not dropped`);
   }
 });
