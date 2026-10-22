@@ -63,7 +63,17 @@ export function TourGuideHost() {
       await new Promise((r) => setTimeout(r, 350));
       steps = config.steps.filter((s) => visible(s.selector));
     }
-    if (steps.length === 0) return;
+    if (steps.length === 0) {
+      // The page has nothing for the tour to point at. Leaving the tour
+      // unrun would teach the page nothing at all: the tour is what teaches a
+      // page that has one, and the static card deliberately stays out of the
+      // way until the tour has been seen. So the tour is recorded as seen and
+      // the card takes over - the student is never left with a page that
+      // explains itself to nobody.
+      markTourSeen(uid, config.key);
+      window.dispatchEvent(new CustomEvent(PAGE_GUIDE_EVENT));
+      return;
+    }
 
     const ar = lang === "ar";
     const t = introJs.tour();

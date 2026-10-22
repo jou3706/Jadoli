@@ -19,7 +19,7 @@ const ok = (body: string) => ({
 type Entry = { key: string; body: string };
 
 /** Enough of the Cache API for the worker to run against. */
-function fakeCaches(initial: Entry[] = []) {
+function fakeCaches(initial: Entry[] = [], names: string[] = ["jadwali-v4", "jadwali-v3"]) {
   const store = new Map<string, string>(initial.map((e) => [e.key, e.body]));
   // The real Cache API resolves a relative request against the worker's own
   // location, so "/" and the absolute url it means are one entry.
@@ -42,7 +42,13 @@ function fakeCaches(initial: Entry[] = []) {
       return store.delete(key);
     },
     match: async (r: string | { url: string }) => {
-      const body = store.get(abs(r));
+      const key = abs(r);
+      // A cache holds its own entries and nothing else. The default bucket
+      // stands for the cache under test, so it is visible everywhere - but an
+      // entry written under a build's own name belongs to that build alone.
+      const owner = ownerOf(key);
+      if (owner !== name && owner !== "default") return undefined;
+      const body = store.get(key);
       return body === undefined ? undefined : ok(body);
     },
     add: async (u: string) => {
@@ -63,7 +69,7 @@ function fakeCaches(initial: Entry[] = []) {
     open,
     // Two builds' worth sitting there, the older of which is the one a fix has
     // to displace.
-    keys: async () => ["jadwali-v4", "jadwali-v3"],
+    keys: async () => names,
     delete: async (k: string) => {
       // The default bucket stands for the cache under test, so it is what a
       // caller means when it asks for an old name to go.
@@ -96,13 +102,19 @@ type Harness = {
 };
 
 async function boot(
-  opts: { online?: boolean; cached?: Entry[]; windows?: { url: string }[] } = {},
+  opts: {
+    online?: boolean;
+    cached?: Entry[];
+    windows?: { url: string }[];
+    /** The cache names the browser is holding, newest first. */
+    cacheNames?: string[];
+  } = {},
 ): Promise<Harness> {
   const source = await readFile(SW, "utf8");
   const listeners: Record<string, (e: never) => void> = {};
   const calls: string[] = [];
   const net = { up: opts.online ?? true, reload: false };
-  const caches = fakeCaches(opts.cached ?? []);
+  const caches = fakeCaches(opts.cached ?? [], opts.cacheNames);
   const shown: Shown[] = [];
   const opened: string[] = [];
   const windows: { url: string; focused?: boolean }[] = opts.windows ?? [];
@@ -396,10 +408,13 @@ test("every route the app can open is reachable offline", async () => {
     "/events",
     "/attendance",
     "/subjects",
+    "/review",
+    "/quiz",
+    "/questions",
     "/import",
-"/assistant",
-  "/widget",
-  "/privacy",
+    "/assistant",
+    "/widget",
+    "/privacy",
   ];
   for (const r of routes) {
     const res = await handle(h, r, "navigate");
@@ -407,6 +422,33 @@ test("every route the app can open is reachable offline", async () => {
       (res.res as { status: number }).status,
       503,
       `${r} must open offline - it hung the loading state when it was missing`,
+    );
+  }
+});
+
+test("every page in the sidebar is in the offline shell", async () => {
+  // The shell list is hand-written and the sidebar is hand-written too, and
+  // nothing in the compiler connects them. A page that is in one and not the
+  // other is a page that opens to an error the moment the signal goes - so
+  // the two lists are compared here, where a missing one cannot ship.
+  const sw = await readFile(SW, "utf8");
+  const shell = sw.match(/const SHELL = \[([\s\S]*?)\];/)?.[1] ?? "";
+  const cached = new Set(
+    [...shell.matchAll(/"([^"]+)"/g)].map((m) => m[1]),
+  );
+
+  const sidebar = await readFile(
+    new URL("../src/components/layout/sidebar.tsx", import.meta.url),
+    "utf8",
+  );
+  const nav = sidebar.match(/export const NAV = \[([\s\S]*?)\] as const;/)?.[1] ?? "";
+  const routes = [...nav.matchAll(/to: "([^"]+)"/g)].map((m) => m[1]);
+
+  assert.ok(routes.length > 0, "the sidebar's pages must be readable");
+  for (const r of routes) {
+    assert.ok(
+      cached.has(r),
+      `${r} is a page in the app and must open offline, not answer with an error`,
     );
   }
 });
@@ -443,7 +485,9 @@ test("a hashed script is served from the cache and never refetched", async () =>
   assert.equal(h.calls.filter((u) => u === chunk).length, 1, "fetched once, then cached");
 });
 
-test("the previous build's cache is dropped on activate", async () => {
+test("caches older than the previous build are dropped on activate", async () => {
+  // The worker holds the current build and the one before it. Anything older
+  // cannot be needed by any tab, and storage is not unbounded.
   const h = await boot();
   let waited: Promise<unknown> = Promise.resolve();
   (h.listeners.activate as (e: unknown) => void)({
@@ -453,6 +497,65 @@ test("the previous build's cache is dropped on activate", async () => {
   });
   await waited;
   assert.deepEqual(h.caches.store.size, 0, "v3 entries must not survive into v4");
+});
+
+test("the build before this one is kept, for tabs still running it", async () => {
+  // A deploy renames every chunk. A tab that is still running the previous
+  // build asks for the old names, the server has forgotten them, and the only
+  // copy left is in the cache that build wrote. Keeping one generation back
+  // is what stops that tab from opening an error instead of a page. Anything
+  // older than that is dropped.
+  const source = await readFile(SW, "utf8");
+  const version = source.match(/const VERSION = "([^"]+)"/)?.[1];
+  assert.ok(version, "the worker must name its cache");
+  const previous = version.replace(/(\d+)$/, (n) => String(Number(n) - 1));
+  const older = version.replace(/(\d+)$/, (n) => String(Number(n) - 2));
+
+  const h = await boot({ cacheNames: [version, previous, older] });
+  await (await h.caches.open(previous)).put(`${ORIGIN}/_next/static/chunks/old.js`, {
+    body: "old chunk",
+  });
+  await (await h.caches.open(older)).put(`${ORIGIN}/_next/static/chunks/older.js`, {
+    body: "older chunk",
+  });
+
+  let waited: Promise<unknown> = Promise.resolve();
+  (h.listeners.activate as (e: unknown) => void)({
+    waitUntil: (p: Promise<unknown>) => {
+      waited = p;
+    },
+  });
+  await waited;
+
+  assert.ok(
+    h.caches.store.has(`${ORIGIN}/_next/static/chunks/old.js`),
+    "the previous build's chunks must survive for the tabs still running it",
+  );
+  assert.ok(
+    !h.caches.store.has(`${ORIGIN}/_next/static/chunks/older.js`),
+    "two builds back is dropped - it cannot be needed by any tab",
+  );
+});
+
+test("a chunk from the previous build is still served to the tab that needs it", async () => {
+  // The failure this prevents: the tab asks for a chunk the server no longer
+  // has, the cache does not have it either, and the page opens to nothing.
+  const source = await readFile(SW, "utf8");
+  const version = source.match(/const VERSION = "([^"]+)"/)?.[1];
+  assert.ok(version, "the worker must name its cache");
+  const previous = version.replace(/(\d+)$/, (n) => String(Number(n) - 1));
+  const chunk = `${ORIGIN}/_next/static/chunks/old-build.js`;
+
+  const h = await boot({ cacheNames: [version, previous] });
+  await (await h.caches.open(previous)).put(chunk, { body: "old build code" });
+  h.setNet(false);
+
+  const { res } = await handle(h, chunk);
+  assert.equal(
+    (res as { body: string }).body,
+    "old build code",
+    "the chunk the tab asked for must be answered, not a 504",
+  );
 });
 
 test("the cache name changes with the build, so a fix can actually reach the browser", async () => {
@@ -488,33 +591,28 @@ test("the cache name changes with the build, so a fix can actually reach the bro
 test("a browser holding the previous build's cache is given the current one", async () => {
   const source = await readFile(SW, "utf8");
   const version = source.match(/const VERSION = "([^"]+)"/)?.[1];
-  const previous = version?.replace(/(\d+)$/, (n) => String(Number(n) - 1));
+  assert.ok(version, "the worker must name its cache");
+  const previous = version.replace(/(\d+)$/, (n) => String(Number(n) - 1));
+  assert.notEqual(previous, version, "the fixture assumes a version bump");
 
   // The old build cached the home page and its chunks. The new worker installs
-  // into a cache of its own and drops the old one, so nothing from the previous
-  // build can be served - which is the only way a fix reaches a returning user.
+  // into a cache of its own, so the page the app opens now is the new build's
+  // page - the old one is only kept for the tabs that are still running it.
   const h = await boot({
+    cacheNames: [version, previous],
     cached: [
       { key: `${ORIGIN}/`, body: "old build home page" },
       { key: `${ORIGIN}/_next/static/chunks/old-build.js`, body: "old build code" },
     ],
   });
-  assert.ok(h.caches.store.size > 0, "the fixture should look like a returning browser");
+  await install(h);
 
-  let waited: Promise<unknown> = Promise.resolve();
-  (h.listeners.activate as (e: unknown) => void)({
-    waitUntil: (p: Promise<unknown>) => {
-      waited = p;
-    },
-  });
-  await waited;
-  assert.notEqual(previous, version, "the fixture assumes a version bump");
-  for (const key of h.caches.store.keys()) {
-    assert.doesNotMatch(key, /old-build/, "no entry from the previous build may survive");
-  }
-  // The name is what did the work: entries written under the previous build's
-  // cache are the ones that went.
-  assert.deepEqual([...h.caches.owners.values()].filter((o) => o === "jadwali-v5"), []);
+  const res = await handle(h, "/", "navigate");
+  assert.notEqual(
+    (res.res as { body: string }).body,
+    "old build home page",
+    "a new page must not be served from the previous build's cache",
+  );
 });
 
 // ─────────────────────────────────────────────────────────────

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { UserPlus } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/db/auth";
+import { markPrivacyConsent } from "@/lib/privacy-consent";
 import { AuthShell } from "@/components/layout/auth-shell";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/input";
@@ -50,6 +51,10 @@ export function RegisterScreen() {
             );
             return;
           }
+          // The consent is given here, not only when the account exists: the
+          // student ticked the box, and that is the fact worth keeping - so
+          // signing in later with Google does not ask again.
+          markPrivacyConsent();
           setBusy(true);
           try {
             await signUp(email, password, fullName);
@@ -114,14 +119,20 @@ export function RegisterScreen() {
         <label className="flex items-start gap-2 text-sm text-muted-foreground">
           <input
             type="checkbox"
-            required
             checked={agreed}
             onChange={(e) => setAgreed(e.target.checked)}
             className="mt-0.5 h-4 w-4 accent-primary"
           />
           <span>
             {tr("أوافق، قرأت ", "I have read and agree to the ")}
-            <Link href="/privacy" className="font-semibold text-primary underline">
+            {/* A new tab, so reading the policy does not throw away the name,
+                the email and the password that were already typed. */}
+            <Link
+              href="/privacy"
+              target="_blank"
+              rel="noreferrer"
+              className="font-semibold text-primary underline"
+            >
               {tr("سياسة الخصوصية", "Privacy Policy")}
             </Link>
           </span>

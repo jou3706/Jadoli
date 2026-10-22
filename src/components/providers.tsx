@@ -43,8 +43,17 @@ function OfflineWarmup() {
     const id = setTimeout(() => {
       void (async () => {
         try {
-          const worker = (await navigator.serviceWorker.ready).active;
-          if (!worker) return;
+          // Every worker this page could be talking to, not just the active
+          // one. A worker that is still installing is the new build, and the
+          // one that is active may be the old build - which does not know the
+          // message name this page uses. The message is a cache fill, so
+          // sending it to all of them is safe and it is the only way the new
+          // build's assets reach the cache before the next deploy.
+          const registration = await navigator.serviceWorker.getRegistration();
+          const workers = [registration?.active, registration?.waiting, registration?.installing].filter(
+            (w): w is ServiceWorker => Boolean(w),
+          );
+          if (!workers.length) return;
           const urls = new Set<string>();
           const add = (u: string | null | undefined) => {
             if (!u) return;
@@ -69,7 +78,14 @@ function OfflineWarmup() {
             const kind = (e as PerformanceResourceTiming).initiatorType;
             if (kind !== "beacon") add(e.name);
           }
-          if (urls.size) worker.postMessage({ type: "jadwali:warm", urls: [...urls] });
+          if (!urls.size) return;
+          for (const worker of workers) {
+            try {
+              worker.postMessage({ type: "jadwali:warm", urls: [...urls] });
+            } catch {
+              /* a worker that cannot be reached is not a reason to stop */
+            }
+          }
         } catch {
           /* offline support is optional */
         }

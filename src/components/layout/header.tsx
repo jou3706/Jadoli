@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Bell, BellRing, Check, CloudOff, CloudUpload, HelpCircle, LogOut, Pencil, Route, Search, X } from "lucide-react";
+import { Bell, BellRing, Check, CloudOff, CloudUpload, HelpCircle, LogOut, Pencil, Route, Search, Shield, X } from "lucide-react";
 import { useI18n } from "@/lib/i18n";
 import { useAuth } from "@/lib/db/auth";
 import { useList, useOffline } from "@/lib/db/store";
@@ -186,6 +186,23 @@ export function Header({
             }
           >
             <HelpCircle className="h-4 w-4" />
+          </Button>
+
+          {/*
+            The privacy policy has to be reachable while signed in, not only on
+            the screens a student passes on the way in. A policy that can only
+            be read before signing up is a policy nobody reads afterwards.
+          */}
+          <Button
+            variant="ghost"
+            size="icon"
+            asChild
+            aria-label={tr("سياسة الخصوصية", "Privacy Policy")}
+            title={tr("سياسة الخصوصية", "Privacy Policy")}
+          >
+            <Link href="/privacy" target="_blank" rel="noreferrer">
+              <Shield className="h-4 w-4" />
+            </Link>
           </Button>
 
           <div className="relative hidden sm:block" data-tour="search">

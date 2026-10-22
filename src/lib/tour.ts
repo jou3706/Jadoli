@@ -220,6 +220,15 @@ export const TOURS: TourConfig[] = [
         ],
         position: "bottom",
       },
+      {
+        selector: '[data-tour="subject-card"]',
+        title: ["بطاقة المادة", "The course card"],
+        intro: [
+          "كل بطاقة مادة واحدة: بتقولك كام محاضرة عندك فيها، وملفاتها وأحداثها، ومن غير ما تفتحها.",
+          "One card is one course: how many sessions it has, its files and its events, without opening it.",
+        ],
+        position: "bottom",
+      },
     ],
   },
   {
@@ -379,6 +388,15 @@ export const TOURS: TourConfig[] = [
         ],
         position: "top",
       },
+      {
+        selector: '[data-tour="gpa-list"]',
+        title: ["المواد اللي ضفتها", "The courses you added"],
+        intro: [
+          "كل سطر مادة واحدة: تقديرها وساعاتها، ومنه تتظبط أو تتشال.",
+          "One row is one course: its grade and its hours, and that is where you fix or remove it.",
+        ],
+        position: "left",
+      },
     ],
   },
   {
@@ -420,6 +438,15 @@ export const TOURS: TourConfig[] = [
           "Each event shows a clear date, and you can edit or remove it from its own control.",
         ],
         position: "left",
+      },
+      {
+        selector: '[data-tour="events-empty"]',
+        title: ["لسه مفيش مناسبات", "No events yet"],
+        intro: [
+          "أول مناسبة تضيفها بتظهر هنا، وبتاخد مكانها في جدولك وفي إشعاراتك.",
+          "The first event you add shows up here, and it takes its place in your schedule and your reminders.",
+        ],
+        position: "bottom",
       },
     ],
   },

@@ -28,7 +28,7 @@
  * chunks, and the old JavaScript, with no way to tell - the app loads, and it
  * is simply the app as it was before the fix.
  */
-const VERSION = "jadwali-v11";
+const VERSION = "jadwali-v12";
 /**
  * Every route the app can open, because a page that is not cached is not
  * merely missing - it is worse than missing. The worker falls back to the home
@@ -49,6 +49,8 @@ const SHELL = [
   "/attendance",
   "/subjects",
   "/review",
+  "/quiz",
+  "/questions",
   "/import",
   "/assistant",
   "/widget",
@@ -66,6 +68,47 @@ const OFFLINE_HTML =
 
 /** Hashed by the build, so a hit is correct by definition and never stale. */
 const immutable = (path) => path.startsWith("/_next/static/");
+
+/**
+ * The build a cache belongs to, read off its name.
+ *
+ * The name carries the build number, so two generations can be compared
+ * without keeping a list of them anywhere. The pre-rename names are read too:
+ * a browser that has been here since before the rename still holds one, and
+ * those are exactly the tabs that need it.
+ */
+const generation = (name) => {
+  const m = /^(?:jadwali|jadoli)-v(\d+)$/.exec(name);
+  return m ? Number(m[1]) : null;
+};
+
+/**
+ * The app's own caches, newest build first.
+ *
+ * The worker keeps one generation back on purpose. A deploy renames every
+ * chunk, so a tab that is still running the previous build asks for files the
+ * server no longer has - and the only copy left is in the cache that build
+ * wrote. Without it the tab's next navigation is a chunk that cannot be
+ * loaded, which is a page that opens to nothing.
+ */
+const ownCaches = async () => {
+  const keys = await caches.keys();
+  const others = keys
+    .filter((k) => generation(k) !== null && k !== VERSION)
+    .sort((a, b) => (generation(b) ?? 0) - (generation(a) ?? 0));
+  return [VERSION, ...others];
+};
+
+/** The caches to keep: this build, and the one before it. */
+const keepers = async () => {
+  const current = generation(VERSION) ?? 0;
+  const keep = new Set();
+  for (const name of await ownCaches()) {
+    const g = generation(name);
+    if (g !== null && g >= current - 1) keep.add(name);
+  }
+  return keep;
+};
 
 const unavailable = () =>
   new Response(OFFLINE_HTML, {
@@ -147,11 +190,10 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("activate", (event) => {
-  const keep = new Set([VERSION]);
   event.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((k) => !keep.has(k)).map((k) => caches.delete(k))))
+      .then((keys) => keepers().then((keep) => Promise.all(keys.filter((k) => !keep.has(k)).map((k) => caches.delete(k)))))
       // Take over the open tabs straight away, otherwise the old worker keeps
       // answering until every one of them is closed.
       .then(() => self.clients.claim()),
@@ -170,7 +212,9 @@ self.addEventListener("activate", (event) => {
  */
 self.addEventListener("message", (event) => {
   const data = event.data;
-  if (!data || data.type !== "jadwali:warm" || !Array.isArray(data.urls)) return;
+  // Both names are accepted: a page still running the build from before the
+  // rename speaks the old one, and the worker it is talking to is this one.
+  if (!data || (data.type !== "jadwali:warm" && data.type !== "jadoli:warm") || !Array.isArray(data.urls)) return;
   const urls = data.urls.filter(
     (u) => typeof u === "string" && u.startsWith(self.location.origin),
   );
@@ -307,6 +351,12 @@ self.addEventListener("fetch", (event) => {
           .catch(async () => {
             const hit = await cache.match(request);
             if (hit) return hit;
+            // The retired caches hold the pages the previous build served, and
+            // an open tab may still be on one of them.
+            for (const name of (await ownCaches()).slice(1)) {
+              const older = await (await caches.open(name)).match(request);
+              if (older) return older;
+            }
             // A page for a different route is not a fallback, it is a wrong
             // answer: this app routes on the client, so the browser would hold
             // the URL it asked for and the data for the home page, ask the
@@ -321,17 +371,23 @@ self.addEventListener("fetch", (event) => {
 
   if (immutable(url.pathname)) {
     event.respondWith(
-      caches.open(VERSION).then(async (cache) => {
-        const hit = await cache.match(request);
-        if (hit) return hit;
+      (async () => {
+        // Every build's cache, newest first: a chunk name belongs to the build
+        // that produced it, so the retired caches can only ever hold chunks
+        // this build has no use for - except for the tab that is still running
+        // that build and needs exactly them.
+        for (const name of await ownCaches()) {
+          const hit = await (await caches.open(name)).match(request);
+          if (hit) return hit;
+        }
         try {
           const res = await fetch(request);
-          remember(cache, request, res);
+          remember(await caches.open(VERSION), request, res);
           return res;
         } catch {
           return missing(url.pathname);
         }
-      }),
+      })(),
     );
     return;
   }
@@ -352,7 +408,12 @@ self.addEventListener("fetch", (event) => {
         const isDocument = request.headers.get("accept")?.includes("text/html");
         if (isDocument) {
           const same = await cache.match(path);
-          return same ?? unavailable();
+          if (same) return same;
+          for (const name of (await ownCaches()).slice(1)) {
+            const older = await (await caches.open(name)).match(path);
+            if (older) return older;
+          }
+          return unavailable();
         }
         return missing(path);
       }
