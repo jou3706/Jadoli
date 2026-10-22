@@ -57,9 +57,10 @@ select public.set_secret('push_cron_secret', '<openssl rand -hex 32>');
 ```
 
    وحط نفس الكلمة الثانية في Vercel كمتغير `PUSH_CRON_SECRET`. بدونها التنبيهات مش هتوصلك والتطبيق مقفول.
-5. اتأكد إن الجدول الزمني شغال: افتح `https://<دومينك>/api/push/health`. لازم `jobAlive: true` و`cronSecretSet: true`، و`minutesSinceTick` أقل من 3. لو `jobAlive: false` فالجدول الزمني مش مثبّت — راجع صلاحيات التنفيذ في Supabase وشغّل الملف تاني.
-6. من **Authentication → URL Configuration** أضف `<دومينك>/reset-password` إلى Redirect URLs، وإلا رابط استعادة الباسورد بيطيح.
-7. (اختياري لكن مُوصى به) تأكد إن حد الذكاء الاصطناعي شغال: الجداول والدوال في `schema.sql` موجودة، وشغّل `supabase/10-ai-rate-limit.sql` للتأكد لو قاعدة البيانات اتعملت قبل النسخة الحالية.
+5. اتأكد إن الجدول الزمني شغال: افتح `https://<دومينك>/api/push/health`. لازم `jobAlive: true` و`cronSecretSet: true`، و`minutesSinceTick` أقل من 3. لو `jobAlive: false` فالجدول الزمني مش مثبّت — راجع صلاحيات التنفيذ في Supabase وشغّل الملف تاني. الـ endpoint بيقول كمان `ticksTable` و`secretsShape` و`subscriptions` و`hint` — يعني بيقول بالظبط إيه الناقص بدل ما يطلّع error غامض.
+6. **افتح التطبيق مرة واحدة** بعد أول تشغيل: الاشتراك في الإشعارات بيعمله المتصفح، ولو مفتاح VAPID اتغيّر بعد ما الاشتراكات القديمة اتعملت فالمتصفح بيكتشف إن المفتاح مختلف وبيجدد الاشتراك لوحده. افتح `/api/push/health` تاني وتأكد إن `subscriptions` بقى 1 أو أكتر.
+7. من **Authentication → URL Configuration** أضف `<دومينك>/reset-password` إلى Redirect URLs، وإلا رابط استعادة الباسورد بيطيح.
+8. (اختياري لكن مُوصى به) تأكد إن حد الذكاء الاصطناعي شغال: الجداول والدوال في `schema.sql` موجودة، وشغّل `supabase/10-ai-rate-limit.sql` للتأكد لو قاعدة البيانات اتعملت قبل النسخة الحالية.
 
 ## النشر على Vercel
 
