@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import webpush from "web-push";
 import {
   dueReminders,
   isGoneStatus,
@@ -278,36 +279,198 @@ export async function recordTick(sb: PushClient, counts: TickInsert) {
  * Null is a real answer - it means the job has never run - and it is not the
  * same as an old row.
  */
-export async function lastTick(sb: PushClient) {
+/** What one delivery pass did. */
+export type DeliverySummary = {
+  subscriptions: number;
+  sent: number;
+  failed: number;
+  removed: number;
+  reminders: number;
+};
+
+/** The heartbeat of the delivery job, as it is stored. */
+export type TickRow = {
+  at: string;
+  subscriptions: number;
+  sent: number;
+  failed: number;
+  removed: number;
+  reminders: number;
+};
+
+/**
+ * The heartbeat of the delivery job, and whether it has a table to live in.
+ *
+ * A database that has not been migrated yet has no `push_ticks` table, and
+ * that is a fact about the migration rather than a failure of the job - so it
+ * is reported as its own answer instead of an error.
+ */
+export async function tickStatus(sb: PushClient): Promise<{ table: boolean; last: TickRow | null }> {
   const { data, error } = await sb
     .from(TICKS)
     .select("at,subscriptions,sent,failed,removed,reminders")
     .order("at", { ascending: false })
     .limit(1);
-  if (error) throw new Error(`TICK:${error.message}`);
+  if (error) {
+    if (/could not find the table|does not exist/i.test(error.message)) {
+      return { table: false, last: null };
+    }
+    throw new Error(`TICK:${error.message}`);
+  }
   const row = (data ?? [])[0];
-  return row ?? null;
-}
-
-/**
+  return { table: true, last: (row as TickRow | undefined) ?? null };
+}/**
  * The delivery job's own configuration, read the way the database holds it.
  *
  * Returns the names that are set and the address of the deployed app, and
  * never the secret itself: this is what a health check answers with, and a
  * secret printed in a browser console is a secret in a screenshot.
+ *
+ * The secrets table is read twice, on purpose. The live database was created
+ * with a `secret` column, and the migration adds a `value` column beside it -
+ * so a database that has not been migrated yet answers a question about
+ * `value` with an error rather than with the value it already has. Asking
+ * again without that column is what makes the health check useful on a
+ * database that is one step behind: the answer is still there, and the check
+ * can say "the migration has not been applied" instead of giving up.
  */
 export async function deliveryConfig(sb: PushClient) {
-  const { data, error } = await sb.from(SECRETS).select("name,secret,value");
-  if (error) throw new Error(`SECRETS:${error.message}`);
-  const rows = (data ?? []) as { name: string; secret: string | null; value: string | null }[];
+  let rows: { name: string; secret: string | null; value: string | null }[] = [];
+  let shape: "value" | "secret" | "none" = "none";
+
+  const full = await sb.from(SECRETS).select("name,secret,value");
+  if (!full.error) {
+    rows = (full.data ?? []) as { name: string; secret: string | null; value: string | null }[];
+    shape = "value";
+  } else {
+    const legacy = await sb.from(SECRETS).select("name,secret");
+    if (legacy.error) throw new Error(`SECRETS:${legacy.error.message}`);
+    rows = (legacy.data ?? []) as { name: string; secret: string | null; value: string | null }[];
+    shape = "secret";
+  }
+
   const byName = new Map(rows.map((r) => [r.name, r]));
   const url = byName.get("push_api_url");
   const secret = byName.get("push_cron_secret");
+  const apiUrl = (url?.value ?? url?.secret ?? "").trim();
+  const cronSecret = (secret?.value ?? secret?.secret ?? "").trim();
   return {
-    apiUrl: (url?.value ?? url?.secret ?? "").trim() || null,
-    apiUrlSet: Boolean((url?.value ?? url?.secret ?? "").trim()),
-    cronSecretSet: Boolean((secret?.value ?? secret?.secret ?? "").trim()),
+    apiUrl: apiUrl || null,
+    apiUrlSet: Boolean(apiUrl),
+    cronSecretSet: Boolean(cronSecret),
+    /**
+     * Which shape the table is in. "value" is the migrated one; "secret" means
+     * the database is running the old schema, which is a fact worth reporting
+     * rather than a reason to throw.
+     */
+    shape: shape as "value" | "secret",
   };
+}
+
+/**
+ * Sends what is owed to a set of subscribers.
+ *
+ * Shared by the two callers that deliver: the database job, which sees every
+ * subscriber, and the student's own browser, which sees only their own. The
+ * rules are the same in both - what differs is whose subscriptions are in the
+ * list - so the rules live here rather than in either route.
+ *
+ * The shape of a run: for each subscription, work out what that reader owes
+ * from their own zone, send it, and write down what went out. Subscriptions
+ * the push service reports as gone are deleted in the same pass, because a row
+ * that can never be delivered to is a row that costs a lookup every minute
+ * forever.
+ */
+export async function deliverTo(
+  sb: PushClient,
+  subs: StoredSubscription[],
+  now = new Date(),
+): Promise<DeliverySummary> {
+  const summary: DeliverySummary = {
+    subscriptions: 0,
+    sent: 0,
+    failed: 0,
+    removed: 0,
+    reminders: 0,
+  };
+
+  const keys = vapidKeys();
+  if (!keys) throw new Error("NO_VAPID");
+
+  webpush.setVapidDetails(
+    process.env.NEXT_PUBLIC_SITE_URL || "mailto:jadwali@example.com",
+    keys.publicKey,
+    keys.privateKey,
+  );
+
+  for (const row of subs) {
+    summary.subscriptions += 1;
+
+    let reminders;
+    try {
+      reminders = await remindersFor(sb, row, now);
+    } catch {
+      // One reader's broken row must not stop everyone else's reminders going
+      // out on this tick. It is reported and the next tick tries again.
+      summary.failed += 1;
+      continue;
+    }
+
+    if (reminders.length === 0) continue;
+    summary.reminders += reminders.length;
+
+    const subscription = {
+      endpoint: row.endpoint,
+      keys: { p256dh: row.p256dh, auth: row.auth },
+    };
+    const sentKeys: string[] = [];
+    let live = true;
+
+    for (const reminder of reminders) {
+      try {
+        await webpush.sendNotification(
+          subscription,
+          JSON.stringify({
+            title: reminder.title,
+            body: reminder.body,
+            tag: reminder.tag,
+            url: reminder.url,
+            eventId: reminder.eventId,
+          }),
+          { TTL: 3600 },
+        );
+        summary.sent += 1;
+        sentKeys.push(reminder.key);
+      } catch (e) {
+        const status = (e as { statusCode?: number }).statusCode ?? 0;
+        if (isGoneStatus(status)) {
+          // The endpoint is dead: cleared in the browser, or the profile gone.
+          await forgetSubscription(sb, row.id);
+          summary.removed += 1;
+          live = false;
+          break;
+        }
+        // A 429 or a 5xx is the push service having a moment. Leave the row
+        // alone: this reminder simply goes out on a later tick, and the ledger
+        // still says it has not been sent.
+        summary.failed += 1;
+      }
+    }
+
+    if (live && sentKeys.length) {
+      try {
+        await markDelivered(sb, row.user_id, sentKeys);
+        await touchSubscription(sb, row.id);
+      } catch {
+        // The push went out but the ledger did not, so the next tick would send
+        // it again. The tag makes that a replacement in the tray rather than a
+        // second notification, which is the survivable version of this bug.
+        summary.failed += 1;
+      }
+    }
+  }
+
+  return summary;
 }
 
 export { isGoneStatus, subscriptionSchema, alarmKey };

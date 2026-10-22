@@ -20,6 +20,12 @@ const sendRoute = () =>
   readFile(new URL("../src/app/api/push/send/route.ts", import.meta.url), "utf8");
 const healthRoute = () =>
   readFile(new URL("../src/app/api/push/health/route.ts", import.meta.url), "utf8");
+const tickRoute = () =>
+  readFile(new URL("../src/app/api/push/tick/route.ts", import.meta.url), "utf8");
+const clientFile = () =>
+  readFile(new URL("../src/lib/push-reminders.ts", import.meta.url), "utf8");
+const alarmsHook = () =>
+  readFile(new URL("../src/hooks/use-event-alarms.ts", import.meta.url), "utf8");
 const server = () =>
   readFile(new URL("../src/lib/push-server.ts", import.meta.url), "utf8");
 
@@ -93,11 +99,22 @@ test("the heartbeat is written through the service role, not a browser", async (
 
 test("there is an endpoint that says whether the job is alive", async () => {
   const text = await healthRoute();
-  assert.match(text, /lastTick\(sb\)/);
+  assert.match(text, /tickStatus\(sb\)/);
   assert.match(text, /deliveryConfig\(sb\)/);
   // It has to be able to say "no", and to say "never ran" as its own answer.
   assert.match(text, /jobAlive/);
   assert.match(text, /minutesSinceTick/);
+});
+
+test("the health endpoint says what is missing, not just that something is", async () => {
+  const text = await healthRoute();
+  // A database that has not been migrated yet has no heartbeat table, and the
+  // difference between "the job is broken" and "the job has not been installed"
+  // is the difference between a fix and a wasted afternoon.
+  assert.match(text, /ticksTable/);
+  assert.match(text, /secretsShape/);
+  assert.match(text, /hint/);
+  assert.match(text, /09-push-subscriptions\.sql/);
 });
 
 test("the health endpoint never prints the secret", async () => {
@@ -108,3 +125,48 @@ test("the health endpoint never prints the secret", async () => {
   );
   assert.match(text, /cronSecretSet/);
 });
+
+test("the delivery rules live in one place, not in each route", async () => {
+  // Two callers deliver: the database job and the student's own browser. If
+  // the rules were written twice they would drift, and the two would send
+  // different reminders to the same person.
+  const lib = await server();
+  assert.match(lib, /export async function deliverTo\(/);
+  const send = await sendRoute();
+  assert.match(send, /deliverTo\(sb/);
+  const tick = await tickRoute();
+  assert.match(tick, /deliverTo\(sb/);
+});
+
+test("the browser can only deliver to itself", async () => {
+  const text = await tickRoute();
+  // The list of subscriptions is filtered by the id that came out of the
+  // caller's own token, not by anything the caller can put in the request.
+  assert.match(text, /\.eq\("user_id", userId\)/);
+  assert.match(text, /own\.auth\.getUser\(token\)/);
+  // And it is not the secret-guarded route: a browser cannot call that one.
+  assert.ok(!/x-cron-secret/.test(text));
+});
+
+test("the browser does not write the heartbeat", async () => {
+  const text = await tickRoute();
+  // The heartbeat belongs to the scheduled job. A browser writing it would
+  // turn a dead job into a healthy-looking one, which is the exact lie the
+  // heartbeat exists to prevent.
+  assert.ok(!/recordTick/.test(text));
+});
+
+test("the app asks for its own reminders while it is open", async () => {
+  const text = await clientFile();
+  assert.match(text, /\/api\/push\/tick/);
+  // Only when there is somewhere to deliver to, and only when somebody is
+  // looking at the page.
+  assert.match(text, /isPushSubscribed\(\)/);
+  assert.match(text, /visibilityState !== "visible"/);
+});
+
+test("the alarm hook is what asks", async () => {
+  const text = await alarmsHook();
+  assert.match(text, /requestOwnReminders\(\)/);
+});
+

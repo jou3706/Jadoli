@@ -32,6 +32,7 @@ import {
   reportAlarmsLive,
   shouldNotifyInApp,
 } from "@/lib/push-subscription";
+import { requestOwnReminders } from "@/lib/push-reminders";
 import { useAlarmPrefs } from "@/hooks/use-alarm-prefs";
 
 /**
@@ -157,6 +158,22 @@ export function useEventAlarms() {
     if (!who) return;
     reportAlarmsLive();
     const id = setInterval(() => reportAlarmsLive(), 30_000);
+    return () => clearInterval(id);
+  }, [who]);
+
+  /**
+   * Ask the server for this student's own reminders.
+   *
+   * The database job is what reminds a student whose phone is asleep. It is
+   * installed by a migration, and until that is done the app asks for its own
+   * reminders instead - a minute at a time, and only while the page is in
+   * front of the student, because a page nobody is looking at has no business
+   * spending the push service's quota.
+   */
+  useEffect(() => {
+    if (!who) return;
+    void requestOwnReminders();
+    const id = setInterval(() => void requestOwnReminders(), 60_000);
     return () => clearInterval(id);
   }, [who]);
 
